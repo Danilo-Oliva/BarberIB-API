@@ -1,0 +1,5 @@
+creds.json
+__pycache__/
+.env
+.vscode/
+test_sheet.py
