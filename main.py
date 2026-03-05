@@ -4,10 +4,23 @@ from fastapi import FastAPI, Form, Response
 from twilio.twiml.messaging_response import MessagingResponse
 import datetime
 import pytz
+import os    # <--- IMPORTANTE
+import json  # <--- IMPORTANTE
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN PARA LA NUBE (RAILWAY) ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
+
+# Intentamos leer la variable de entorno GOOGLE_CREDS que pegaste en Railway
+google_creds_json = os.environ.get("GOOGLE_CREDS")
+
+if google_creds_json:
+    # Si estamos en la nube, cargamos desde la variable de entorno
+    creds_dict = json.loads(google_creds_json)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+else:
+    # Si estás en tu PC local, sigue buscando el archivo creds.json
+    creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
+
 client_sheets = gspread.authorize(creds)
 
 app = FastAPI()
@@ -80,7 +93,7 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
         sesiones[num_telefono] = {"estado": "inicio"}
     estado_actual = sesiones[num_telefono]["estado"]
 
-    # 3. Print de debug seguro
+    # 3. Print de debug seguro (se verá en los logs de Railway)
     print(f"DEBUG: Tel: {num_telefono} | Msg: {msg} | Estado: {estado_actual}")
 
     # OBTENER DATOS FRESCOS EN CADA MENSAJE
@@ -165,7 +178,8 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
             res_text = f"Tenemos turnos para el {txt_d}."
             if avisos_exc: res_text += "\n\n" + "\n".join(avisos_exc)
             res_text += "\n\n👉 Elija día para ver horarios (ej: Lunes)\n↩️ *2* para volver"
-        else: res_text = "No hay turnos disponibles. 😭\n\n↩️ *2* para volver."
+        else:
+            res_text = "No hay turnos disponibles. 😭\n\n↩️ *2* para volver."
         response.message(res_text)
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
     
@@ -192,7 +206,8 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
             if dispo:
                 res_text = f"Horarios para el {dia_det.capitalize()} ({fecha_str}):\n\n" + "\n".join(dispo)
                 res_text += "\n\n👉 Decime hora y nombre (ej: *10 Danilo*)\n↩️ *1* para volver"
-            else: res_text = "Día lleno. 😭\n\n↩️ *1* para volver"
+            else:
+                res_text = "Día lleno. 😭\n\n↩️ *1* para volver"
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
@@ -246,7 +261,8 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                     
                 sesiones[num_telefono]["estado"] = "inicio"
                 response.message(f"¡Listo {nom}! Turno para el {fecha_r} a las {h_des}. ✂️")
-            else: response.message("Horario no disponible. 👆")
+            else:
+                response.message("Horario no disponible. 👆")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     # CANCELAR
@@ -281,8 +297,10 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                     
                 sesiones[num_telefono]["estado"] = "inicio"
                 response.message(f"Turno cancelado. 🤝")
-            else: response.message(f"No encontré el turno.")
-        else: response.message("Usá: *Cancelar 8*")
+            else:
+                response.message(f"No encontré el turno.")
+        else:
+            response.message("Usá: *Cancelar 8*")
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     sesiones[num_telefono]["estado"] = "inicio"
