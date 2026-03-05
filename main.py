@@ -4,8 +4,8 @@ from fastapi import FastAPI, Form, Response
 from twilio.twiml.messaging_response import MessagingResponse
 import datetime
 import pytz
-import os    # <--- IMPORTANTE
-import json  # <--- IMPORTANTE
+import os
+import json 
 
 # --- CONFIGURACIÓN PARA LA NUBE (RAILWAY) ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
