@@ -10,7 +10,7 @@ import json
 # --- CONFIGURACIÓN PARA LA NUBE (RAILWAY) ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-# Intentamos leer la variable de entorno GOOGLE_CREDS que pegaste en Railway
+# Intentamos leer la variable de entorno GOOGLE_CREDS que hay en Railway
 google_creds_json = os.environ.get("GOOGLE_CREDS")
 
 if google_creds_json:
@@ -18,7 +18,7 @@ if google_creds_json:
     creds_dict = json.loads(google_creds_json)
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 else:
-    # Si estás en tu PC local, sigue buscando el archivo creds.json
+    # Si estamos en la PC local, sigue buscando el archivo creds.json
     creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
 
 client_sheets = gspread.authorize(creds)
@@ -205,7 +205,7 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
 
             if dispo:
                 res_text = f"Horarios para el {dia_det.capitalize()} ({fecha_str}):\n\n" + "\n".join(dispo)
-                res_text += "\n\n👉 Decime hora y nombre (ej: *10 Danilo*)\n↩️ *1* para volver"
+                res_text += "\n\n👉 Decime hora y nombre (ej: *10 Nachito*)\n↩️ *1* para volver"
             else:
                 res_text = "Día lleno. 😭\n\n↩️ *1* para volver"
             response.message(res_text)
