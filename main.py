@@ -5,7 +5,8 @@ from twilio.twiml.messaging_response import MessagingResponse
 import datetime
 import pytz
 import os
-import json 
+import json
+import re
 
 # --- CONFIGURACIÓN PARA LA NUBE (RAILWAY) ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -65,12 +66,15 @@ def obtener_horas_por_dia(datos_horarios, weekday, semana_index):
                     
     return list(dict.fromkeys(horas))
 
-def extraer_hora(partes):
-    for p in partes:
-        if ":" in p: return p.strip().zfill(5)
-        elif p.isdigit():
-            num = int(p)
-            if 0 <= num <= 23: return f"{num:02d}:00"
+def extraer_hora(msg):
+    """Busca un patrón de hora en todo el mensaje, ignorando 'hs', 'h', etc."""
+    # Busca patrones como 10:30, 10.30, 10, 10hs, 10h
+    match = re.search(r'(\d{1,2})(?:[:.](\d{2}))?(?:\s*(?:hs|h|hrs|horas))?', msg)
+    if match:
+        hora = int(match.group(1))
+        minuto = match.group(2) if match.group(2) else "00"
+        if 0 <= hora <= 23:
+            return f"{hora:02d}:{minuto}"
     return None
 
 @app.post("/whatsapp")
@@ -162,15 +166,18 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                             horas_del_dia = [h for h in horas_del_dia if ini <= h <= fin]
 
             ocupados = [f[1].strip().zfill(5) for f in datos_agenda if len(f) >= 2 and f[0] == fecha_str]
+            # FORMATO VISUAL: Lunes (10/03)
+            dia_visual = f"{nombre_dia.capitalize()} ({fecha_dt.strftime('%d/%m')})"
+            
             if i == 0:
                 h_fut = [h for h in horas_del_dia if h not in ocupados and datetime.datetime.strptime(h, "%H:%M").time() > hoy_dt.time()]
                 if h_fut:
-                    dias_disponibles.append(nombre_dia.capitalize())
-                    mapa_dias[nombre_dia] = fecha_str
+                    dias_disponibles.append(dia_visual)
+                    mapa_dias[dia_visual.lower()] = fecha_str
             else:
                 if len(ocupados) < len(horas_del_dia):
-                    dias_disponibles.append(nombre_dia.capitalize())
-                    mapa_dias[nombre_dia] = fecha_str
+                    dias_disponibles.append(dia_visual)
+                    mapa_dias[dia_visual.lower()] = fecha_str
 
         sesiones[num_telefono]["mapa_dias"] = mapa_dias
         if dias_disponibles:
@@ -216,9 +223,11 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
             response.message(res_text + " Revisá la lista arriba. 👆")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
-    # PASO 4: RESERVAR
+    # PASO 4: RESERVAR (Con Checkpoint)
     if estado_actual == "viendo_horarios" and "cancelar" not in msg:
-        h_des = extraer_hora(partes)
+        # Ahora le pasamos el mensaje completo a extraer_hora
+        h_des = extraer_hora(msg) 
+        
         if h_des:
             fecha_r = sesiones[num_telefono].get("fecha_seleccionada")
             f_obj = datetime.datetime.strptime(fecha_r, "%d/%m/%Y")
@@ -260,11 +269,15 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                     print(f"Error actualizando celda de Reserva: {e}")
                     
                 sesiones[num_telefono]["estado"] = "inicio"
-                response.message(f"¡Listo {nom}! Turno para el {fecha_r} a las {h_des}. ✂️")
+                response.message(f"¡Listo {nom}! Turno confirmado para el {fecha_r} a las {h_des}. ✂️\n\n⚠️ Recordá que tenemos 15 min de tolerancia.")
             else:
-                response.message("Horario no disponible. 👆")
+                # CHECKPOINT: No cambiamos el estado, le decimos que intente de nuevo
+                response.message("Ese horario no está disponible o lo escribiste mal. Revisá la lista arriba e intentá de nuevo (ej: *10 Nachito*). 👆\n↩️ *1* para volver")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
-
+        else:
+            # CHECKPOINT: Si no detecta ninguna hora válida
+            response.message("No entendí la hora. Por favor, escribila junto a tu nombre (ej: *10 Nachito* o *10:30 Nachito*).\n↩️ *1* para volver")
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
     # CANCELAR
     if "cancelar" in msg:
         h_c = extraer_hora(partes)
@@ -304,7 +317,7 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     sesiones[num_telefono]["estado"] = "inicio"
-    response.message("¡Hola! 🤖\n\n👉 *1* - Ver turnos disponibles")
+    response.message("¡Hola! 🤖 Bienvenido a la barbería IB.\n⚠️ Recordá que trabajamos con 15 min de tolerancia.\n\n👉 *1* - Ver turnos disponibles")
     return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
 @app.get("/")
