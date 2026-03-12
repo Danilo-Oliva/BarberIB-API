@@ -173,11 +173,13 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                 h_fut = [h for h in horas_del_dia if h not in ocupados and datetime.datetime.strptime(h, "%H:%M").time() > hoy_dt.time()]
                 if h_fut:
                     dias_disponibles.append(dia_visual)
-                    mapa_dias[dia_visual.lower()] = fecha_str
+                    # ACÁ ESTÁ EL CAMBIO: GUARDAMOS SOLO EL nombre_dia EN LA MEMORIA INTERNA
+                    mapa_dias[nombre_dia] = fecha_str
             else:
                 if len(ocupados) < len(horas_del_dia):
                     dias_disponibles.append(dia_visual)
-                    mapa_dias[dia_visual.lower()] = fecha_str
+                    # ACÁ ESTÁ EL CAMBIO: GUARDAMOS SOLO EL nombre_dia EN LA MEMORIA INTERNA
+                    mapa_dias[nombre_dia] = fecha_str
 
         sesiones[num_telefono]["mapa_dias"] = mapa_dias
         if dias_disponibles:
@@ -278,6 +280,7 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
             # CHECKPOINT: Si no detecta ninguna hora válida
             response.message("No entendí la hora. Por favor, escribila junto a tu nombre (ej: *10 Nachito* o *10:30 Nachito*).\n↩️ *1* para volver")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
+
     # CANCELAR
     if "cancelar" in msg:
         h_c = extraer_hora(partes)
