@@ -246,9 +246,18 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
             ocupadas = [f[1].strip().zfill(5) for f in agenda_sheet.get_all_values() if len(f) >= 2 and f[0] == fecha_r]
 
             if h_des in h_val and h_des not in ocupadas:
+                
+                # --- INICIO DEL CAMBIO (Limpieza de nombre) ---
+                # Borramos la hora y la palabra "hs" (ej: "8hs", "10:30") del mensaje original
+                msg_sin_hora = re.sub(r'\d{1,2}(?:[:.]\d{2})?(?:\s*(?:hs|h|hrs|horas))?', '', msg)
+                
                 basura = ["reservar", "a", "las", "para", "el", "hoy", "mañana", "turno"] + DIAS_SEMANA
-                nom = " ".join([p for p in partes if not (p.isdigit() or ":" in p) and quitar_tildes(p) not in basura]).title()
+                
+                # Ahora armamos el nombre usando el mensaje que ya no tiene números
+                nom = " ".join([p for p in msg_sin_hora.split() if quitar_tildes(p) not in basura]).title()
                 if not nom: nom = ProfileName if ProfileName else "Cliente"
+                # --- FIN DEL CAMBIO ---
+                
                 agenda_sheet.append_row([fecha_r, h_des, nom, num_telefono])
                 
                 try:
