@@ -11,15 +11,12 @@ import re
 # --- CONFIGURACIÓN PARA LA NUBE (RAILWAY) ---
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-# Intentamos leer la variable de entorno GOOGLE_CREDS que hay en Railway
 google_creds_json = os.environ.get("GOOGLE_CREDS")
 
 if google_creds_json:
-    # Si estamos en la nube, cargamos desde la variable de entorno
     creds_dict = json.loads(google_creds_json)
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 else:
-    # Si estamos en la PC local, sigue buscando el archivo creds.json
     creds = ServiceAccountCredentials.from_json_keyfile_name("creds.json", scope)
 
 client_sheets = gspread.authorize(creds)
@@ -29,25 +26,21 @@ app = FastAPI()
 # --- ABRIR SHEETS UNA SOLA VEZ AL INICIO ---
 archivo = client_sheets.open("Agenda_Barberia")
 agenda_sheet = archivo.worksheet("Agenda")
-horarios_sheet = archivo.worksheet("Horarios")
+horarios_b1 = archivo.worksheet("Horarios_Barbero1")
+horarios_b2 = archivo.worksheet("Horarios_Barbero2")
+servicios_sheet = archivo.worksheet("Servicios")
 conf_sheet = archivo.worksheet("Configuracion")
 
-# MÁQUINA DE ESTADOS
 sesiones = {}
-
-# ZONA HORARIA DE ARGENTINA
 tz_arg = pytz.timezone('America/Argentina/Buenos_Aires')
 
-# LISTAS DE CONFIGURACIÓN
 DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 DIAS_LABORABLES = [0, 1, 2, 3, 4, 5, 6] 
 
 def quitar_tildes(texto):
     return texto.replace('á','a').replace('é','e').replace('í','i').replace('ó','o').replace('ú','u')
 
-# --- DETECCIÓN DINÁMICA ---
 def obtener_horas_por_dia(datos_horarios, weekday, semana_index):
-    """Escanea la columna específica. Si está vacía, devuelve lista vacía."""
     col_idx = weekday * 2 
     horas = []
     bloque_actual = -1 
@@ -67,8 +60,6 @@ def obtener_horas_por_dia(datos_horarios, weekday, semana_index):
     return list(dict.fromkeys(horas))
 
 def extraer_hora(msg):
-    """Busca un patrón de hora en todo el mensaje, ignorando 'hs', 'h', etc."""
-    # Busca patrones como 10:30, 10.30, 10, 10hs, 10h
     match = re.search(r'(\d{1,2})(?:[:.](\d{2}))?(?:\s*(?:hs|h|hrs|horas))?', msg)
     if match:
         hora = int(match.group(1))
@@ -79,7 +70,6 @@ def extraer_hora(msg):
 
 @app.post("/whatsapp")
 async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: str = Form(None)):
-    # FORZAR HORA ARGENTINA
     hoy_dt = datetime.datetime.now(tz_arg) 
     
     msg = Body.lower().strip()
@@ -88,22 +78,20 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
     response = MessagingResponse()
     num_telefono = From.replace("whatsapp:", "")
     
-    # 1. Ignorar el mensaje de activación del sandbox
     if "join" in msg:
         return Response(content=str(MessagingResponse()), media_type="application/xml; charset=utf-8")
     
-    # 2. Manejo de estado
     if num_telefono not in sesiones: 
         sesiones[num_telefono] = {"estado": "inicio"}
     estado_actual = sesiones[num_telefono]["estado"]
 
-    # 3. Print de debug seguro (se verá en los logs de Railway)
     print(f"DEBUG: Tel: {num_telefono} | Msg: {msg} | Estado: {estado_actual}")
 
-    # OBTENER DATOS FRESCOS EN CADA MENSAJE
-    datos_horarios = horarios_sheet.get_all_values()
+    # Seleccionar la grilla del barbero correcto según la sesión
+    barbero_id = sesiones[num_telefono].get("barbero_id", "1")
+    hoja_activa = horarios_b2 if barbero_id == "2" else horarios_b1
+    datos_horarios = hoja_activa.get_all_values()
     
-    # --- CARGA DE EXCEPCIONES ---
     datos_conf = conf_sheet.get_all_values()
     excepciones = {}
     for fila in datos_conf[1:]: 
@@ -113,32 +101,79 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
             if tipo_exc in ["cerrado", "especial"]:
                 excepciones[fecha_exc] = {"tipo": tipo_exc, "horas": fila[2].strip() if len(fila) > 2 else "", "motivo": fila[3].strip() if len(fila) > 3 else ""}
 
-    # --- FLUJO DE MENÚ ---
+    # --- FLUJO DE MENÚ (MÁQUINA DE ESTADOS COMPLETA) ---
     
-    if msg == "2" and estado_actual in ["eligiendo_dia", "viendo_horarios"]:
+    # BOTÓN DE PÁNICO
+    if msg == "0" and estado_actual != "inicio":
         estado_actual = "inicio"
-        msg = "1" 
+        msg = "1"
         
-    if msg == "1" and estado_actual == "viendo_horarios":
-        estado_actual = "eligiendo_semana"
-        msg = str(sesiones[num_telefono].get("semana", 1)) 
-        
+    # PASO 1: MOSTRAR SERVICIOS
     if msg == "1" and estado_actual == "inicio":
-        sesiones[num_telefono]["estado"] = "eligiendo_semana"
-        res_text = "Tenemos turnos para esta semana y la siguiente. ¿Cuál te gustaría ver?\n\n1️⃣ Esta semana\n2️⃣ La próxima semana"
-        response.message(res_text)
+        sesiones[num_telefono]["estado"] = "eligiendo_servicio"
+        datos_servicios = servicios_sheet.get_all_values()
+        
+        lista_servicios = []
+        for i, fila in enumerate(datos_servicios[1:], start=1):
+            if len(fila) >= 2 and fila[0].strip():
+                lista_servicios.append({"id": str(i), "nombre": fila[0].strip(), "precio": fila[1].strip()})
+        
+        sesiones[num_telefono]["lista_servicios"] = lista_servicios
+        
+        texto_menu = "¿Qué servicio te querés hacer?\n\n"
+        for serv in lista_servicios:
+            texto_menu += f"💈 *{serv['id']}* - {serv['nombre']} (${serv['precio']})\n"
+        
+        response.message(texto_menu + "\n👉 Respondé con el número del servicio.\n↩️ *0* para volver a empezar")
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
-    
-    # PASO 2: SELECCIÓN DE DÍA
-    if msg in ["1", "2"] and estado_actual == "eligiendo_semana":
+
+    # PASO 2: ELEGIR BARBERO
+    if estado_actual == "eligiendo_servicio":
+        lista_guardada = sesiones[num_telefono].get("lista_servicios", [])
+        servicio_elegido = next((s for s in lista_guardada if s["id"] == msg), None)
+        
+        if servicio_elegido:
+            sesiones[num_telefono]["servicio_nombre"] = servicio_elegido["nombre"]
+            sesiones[num_telefono]["servicio_precio"] = servicio_elegido["precio"]
+            sesiones[num_telefono]["estado"] = "eligiendo_barbero"
+            
+            res_text = f"Elegiste *{servicio_elegido['nombre']}*.\n\n¿Con quién te querés atender?\n\n1️⃣ Barbero 1\n2️⃣ Barbero 2\n\n👉 Respondé con 1 o 2.\n↩️ *0* para volver a empezar"
+            response.message(res_text)
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+        else:
+            response.message("Por favor, elegí un número válido de la lista. 👆")
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+
+    # PASO 3: ELEGIR SEMANA (MES ENTERO)
+    if estado_actual == "eligiendo_barbero":
+        if msg in ["1", "2"]:
+            sesiones[num_telefono]["barbero_id"] = msg
+            sesiones[num_telefono]["barbero_nombre"] = "Barbero 1" if msg == "1" else "Barbero 2"
+            sesiones[num_telefono]["estado"] = "eligiendo_semana"
+            
+            # Actualizamos los datos para que el bot lea la hoja del barbero elegido
+            hoja_activa = horarios_b2 if msg == "2" else horarios_b1
+            datos_horarios = hoja_activa.get_all_values()
+            
+            res_text = f"¡Perfecto! ¿Para cuándo buscás turno?\n\n1️⃣ Esta semana\n2️⃣ La próxima semana\n3️⃣ En 15 días\n4️⃣ En 3 semanas\n\n👉 Respondé con un número del 1 al 4.\n↩️ *0* para volver a empezar"
+            response.message(res_text)
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+        else:
+            response.message("Por favor, respondé con 1 o 2. 👆")
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+
+    # PASO 4: SELECCIÓN DE DÍA (ACTUALIZADO PARA 4 SEMANAS)
+    if msg in ["1", "2", "3", "4"] and estado_actual == "eligiendo_semana":
         semana_elegida = int(msg)
         sesiones[num_telefono]["semana"] = semana_elegida
         sesiones[num_telefono]["estado"] = "eligiendo_dia"
 
-        inicio_rango, fin_rango = (0, 7) if semana_elegida == 1 else (7, 14)
+        inicio_rango = (semana_elegida - 1) * 7
+        fin_rango = semana_elegida * 7
+        idx_sem_grilla = semana_elegida - 1
+        
         datos_agenda = agenda_sheet.get_all_values()
         dias_disponibles, mapa_dias, avisos_exc = [], {}, [] 
-        idx_sem_grilla = 0 if semana_elegida == 1 else 1
 
         for i in range(inicio_rango, fin_rango):
             fecha_dt = hoy_dt + datetime.timedelta(days=i)
@@ -165,20 +200,19 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                             ini, fin = p[0].strip().zfill(5), p[1].strip().zfill(5)
                             horas_del_dia = [h for h in horas_del_dia if ini <= h <= fin]
 
-            ocupados = [f[1].strip().zfill(5) for f in datos_agenda if len(f) >= 2 and f[0] == fecha_str]
-            # FORMATO VISUAL: Lunes (10/03)
+            # Filtramos los ocupados asegurando que sean del mismo barbero
+            ocupados = [f[1].strip().zfill(5) for f in datos_agenda if len(f) >= 7 and f[0] == fecha_str and f[6] == sesiones[num_telefono]["barbero_nombre"]]
+            
             dia_visual = f"{nombre_dia.capitalize()} ({fecha_dt.strftime('%d/%m')})"
             
             if i == 0:
                 h_fut = [h for h in horas_del_dia if h not in ocupados and datetime.datetime.strptime(h, "%H:%M").time() > hoy_dt.time()]
                 if h_fut:
                     dias_disponibles.append(dia_visual)
-                    # ACÁ ESTÁ EL CAMBIO: GUARDAMOS SOLO EL nombre_dia EN LA MEMORIA INTERNA
                     mapa_dias[nombre_dia] = fecha_str
             else:
                 if len(ocupados) < len(horas_del_dia):
                     dias_disponibles.append(dia_visual)
-                    # ACÁ ESTÁ EL CAMBIO: GUARDAMOS SOLO EL nombre_dia EN LA MEMORIA INTERNA
                     mapa_dias[nombre_dia] = fecha_str
 
         sesiones[num_telefono]["mapa_dias"] = mapa_dias
@@ -186,20 +220,20 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
             txt_d = ", ".join(dias_disponibles[:-1]) + " o " + dias_disponibles[-1] if len(dias_disponibles) > 1 else dias_disponibles[0]
             res_text = f"Tenemos turnos para el {txt_d}."
             if avisos_exc: res_text += "\n\n" + "\n".join(avisos_exc)
-            res_text += "\n\n👉 Elija día para ver horarios (ej: Lunes)\n↩️ *2* para volver"
+            res_text += "\n\n👉 Elija día para ver horarios (ej: Lunes)\n↩️ *0* para volver a empezar"
         else:
-            res_text = "No hay turnos disponibles. 😭\n\n↩️ *2* para volver."
+            res_text = "No hay turnos disponibles para esta semana. 😭\n\n↩️ *0* para volver a empezar."
         response.message(res_text)
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
     
-    # PASO 3: VER HORARIOS
+    # PASO 5: VER HORARIOS
     if estado_actual == "eligiendo_dia" and "cancelar" not in msg:
         mapa = sesiones[num_telefono].get("mapa_dias", {})
         dia_det = next((d for d in mapa.keys() if quitar_tildes(d) in msg_limpio), None)
         if dia_det:
             fecha_str = mapa[dia_det]
             sesiones[num_telefono]["estado"], sesiones[num_telefono]["fecha_seleccionada"] = "viendo_horarios", fecha_str 
-            idx_s = 0 if sesiones[num_telefono].get("semana", 1) == 1 else 1
+            idx_s = sesiones[num_telefono].get("semana", 1) - 1
             h_dia = obtener_horas_por_dia(datos_horarios, datetime.datetime.strptime(fecha_str, "%d/%m/%Y").weekday(), idx_s)
             
             if fecha_str in excepciones and excepciones[fecha_str]["tipo"] == "especial":
@@ -209,31 +243,31 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                         ini, fin = p[0].strip().zfill(5), p[1].strip().zfill(5)
                         h_dia = [h for h in h_dia if ini <= h <= fin]
 
-            ocupadas = [f[1].strip().zfill(5) for f in agenda_sheet.get_all_values() if len(f) >= 2 and f[0] == fecha_str]
+            # Filtramos los ocupados asegurando que sean del mismo barbero
+            ocupadas = [f[1].strip().zfill(5) for f in agenda_sheet.get_all_values() if len(f) >= 7 and f[0] == fecha_str and f[6] == sesiones[num_telefono]["barbero_nombre"]]
             dispo = [f"✅ {h}" for h in h_dia if h not in ocupadas and (fecha_str != hoy_dt.strftime("%d/%m/%Y") or datetime.datetime.strptime(h, "%H:%M").time() > hoy_dt.time())]
 
             if dispo:
                 res_text = f"Horarios para el {dia_det.capitalize()} ({fecha_str}):\n\n" + "\n".join(dispo)
-                res_text += "\n\n👉 Decime hora y nombre (ej: *10 Nachito*)\n↩️ *1* para volver"
+                res_text += "\n\n👉 Decime hora y nombre (ej: *10 Nachito*)\n↩️ *0* para volver a empezar"
             else:
-                res_text = "Día lleno. 😭\n\n↩️ *1* para volver"
+                res_text = "Día lleno. 😭\n\n↩️ *0* para volver a empezar"
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
             dia_i = next((d for d in DIAS_SEMANA if quitar_tildes(d) in msg_limpio), None)
             res_text = f"El día *{dia_i.capitalize()}* no está disponible." if dia_i else "No entendí el día."
-            response.message(res_text + " Revisá la lista arriba. 👆")
+            response.message(res_text + " Revisá la lista arriba. 👆\n↩️ *0* para volver a empezar")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
-    # PASO 4: RESERVAR (Con Checkpoint)
+    # PASO 6: RESERVAR
     if estado_actual == "viendo_horarios" and "cancelar" not in msg:
-        # Ahora le pasamos el mensaje completo a extraer_hora
         h_des = extraer_hora(msg) 
         
         if h_des:
             fecha_r = sesiones[num_telefono].get("fecha_seleccionada")
             f_obj = datetime.datetime.strptime(fecha_r, "%d/%m/%Y")
-            idx_s = 0 if sesiones[num_telefono].get("semana", 1) == 1 else 1
+            idx_s = sesiones[num_telefono].get("semana", 1) - 1
             h_val = obtener_horas_por_dia(datos_horarios, f_obj.weekday(), idx_s)
             
             if fecha_r in excepciones and excepciones[fecha_r]["tipo"] == "especial":
@@ -243,30 +277,32 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                         ini, fin = p[0].strip().zfill(5), p[1].strip().zfill(5)
                         h_val = [h for h in h_val if ini <= h <= fin]
 
-            ocupadas = [f[1].strip().zfill(5) for f in agenda_sheet.get_all_values() if len(f) >= 2 and f[0] == fecha_r]
+            ocupadas = [f[1].strip().zfill(5) for f in agenda_sheet.get_all_values() if len(f) >= 7 and f[0] == fecha_r and f[6] == sesiones[num_telefono]["barbero_nombre"]]
 
             if h_des in h_val and h_des not in ocupadas:
                 
-                # --- INICIO DEL CAMBIO (Limpieza de nombre) ---
-                # Borramos la hora y la palabra "hs" (ej: "8hs", "10:30") del mensaje original
                 msg_sin_hora = re.sub(r'\d{1,2}(?:[:.]\d{2})?(?:\s*(?:hs|h|hrs|horas))?', '', msg)
-                
                 basura = ["reservar", "a", "las", "para", "el", "hoy", "mañana", "turno"] + DIAS_SEMANA
-                
-                # Ahora armamos el nombre usando el mensaje que ya no tiene números
                 nom = " ".join([p for p in msg_sin_hora.split() if quitar_tildes(p) not in basura]).title()
                 if not nom: nom = ProfileName if ProfileName else "Cliente"
-                # --- FIN DEL CAMBIO ---
                 
-                agenda_sheet.append_row([fecha_r, h_des, nom, num_telefono])
+                # Rescatamos los datos guardados en la sesión
+                serv_nom = sesiones[num_telefono].get("servicio_nombre", "General")
+                serv_precio = sesiones[num_telefono].get("servicio_precio", "0")
+                barbero_nom = sesiones[num_telefono].get("barbero_nombre", "Barbero 1")
                 
+                # Guardamos las 7 columnas en la Agenda
+                agenda_sheet.append_row([fecha_r, h_des, nom, num_telefono, serv_nom, serv_precio, barbero_nom])
+                
+                # Tachamos en la grilla del barbero correcto (Matemática para 4 semanas)
                 try:
                     c_h = (f_obj.weekday() * 2) + 1 
                     c_c = c_h + 1
                     lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
                     diff = (f_obj.date() - lun_act.date()).days
-                    idx_g = 0 if 0 <= diff <= 6 else 1 if 7 <= diff <= 13 else -1
-                    if idx_g != -1:
+                    idx_g = diff // 7  # Magia: Divide por 7 para saber en qué semana cae (0, 1, 2 o 3)
+                    
+                    if 0 <= idx_g <= 3:
                         f_o, b_t = None, -1
                         for n_f, f_d in enumerate(datos_horarios, start=1):
                             if "hora" in " ".join([str(c).lower() for c in f_d]) and "estado" in " ".join([str(c).lower() for c in f_d]):
@@ -275,19 +311,18 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
                             if b_t == idx_g and len(f_d) > (c_h-1) and str(f_d[c_h-1]).strip().zfill(5) == h_des:
                                 f_o = n_f
                                 break
-                        if f_o: horarios_sheet.update_cell(f_o, c_c, nom)
+                        if f_o:
+                            hoja_activa.update_cell(f_o, c_c, nom)
                 except Exception as e: 
-                    print(f"Error actualizando celda de Reserva: {e}")
+                    print(f"Error actualizando grilla de Reserva: {e}")
                     
                 sesiones[num_telefono]["estado"] = "inicio"
-                response.message(f"¡Listo {nom}! Turno confirmado para el {fecha_r} a las {h_des}. ✂️\n\n⚠️ Recordá que tenemos 15 min de tolerancia.")
+                response.message(f"¡Listo {nom}! Turno confirmado para el {fecha_r} a las {h_des} con {barbero_nom}. ✂️\n\n⚠️ Recordá que tenemos 15 min de tolerancia.")
             else:
-                # CHECKPOINT: No cambiamos el estado, le decimos que intente de nuevo
-                response.message("Ese horario no está disponible o lo escribiste mal. Revisá la lista arriba e intentá de nuevo (ej: *10 Nachito*). 👆\n↩️ *1* para volver")
+                response.message("Ese horario no está disponible o lo escribiste mal. Revisá la lista arriba e intentá de nuevo (ej: *10 Nachito*). 👆\n↩️ *0* para volver")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
-            # CHECKPOINT: Si no detecta ninguna hora válida
-            response.message("No entendí la hora. Por favor, escribila junto a tu nombre (ej: *10 Nachito* o *10:30 Nachito*).\n↩️ *1* para volver")
+            response.message("No entendí la hora. Por favor, escribila junto a tu nombre (ej: *10 Nachito* o *10:30 Nachito*).\n↩️ *0* para volver")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     # CANCELAR
@@ -295,41 +330,53 @@ async def whatsapp(Body: str = Form(...), From: str = Form(...), ProfileName: st
         h_c = extraer_hora(partes)
         if h_c:
             datos_a = agenda_sheet.get_all_values()
-            f_o, f_c = None, None
+            f_o, f_c, barbero_canc = None, None, None
+            
+            # Buscamos la fila en la agenda
             for i, f in enumerate(datos_a):
                 if len(f) >= 4 and f[3] == num_telefono and f[1].strip().zfill(5) == h_c:
                     f_o, f_c = i + 1, f[0]
+                    barbero_canc = f[6] if len(f) >= 7 else "Barbero 1"
                     break
+                    
             if f_o:
                 agenda_sheet.delete_rows(f_o)
                 try:
+                    # Seleccionamos el Excel del barbero correcto para borrar el nombre
+                    hoja_canc = horarios_b2 if barbero_canc == "Barbero 2" else horarios_b1
+                    datos_horarios_canc = hoja_canc.get_all_values()
+                    
                     f_obj = datetime.datetime.strptime(f_c, "%d/%m/%Y")
                     c_h = (f_obj.weekday() * 2) + 1
                     c_c = c_h + 1
                     lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
-                    idx_g = 0 if 0 <= (f_obj.date() - lun_act.date()).days <= 6 else 1
-                    f_o_g, b_t = None, -1
-                    for n_f, f_d in enumerate(datos_horarios, start=1):
-                        if "hora" in " ".join([str(c).lower() for c in f_d]):
-                            b_t += 1
-                            continue
-                        if b_t == idx_g and len(f_d) > (c_h-1) and str(f_d[c_h-1]).strip().zfill(5) == h_c:
-                            f_o_g = n_f
-                            break
-                    if f_o_g: horarios_sheet.update_cell(f_o_g, c_c, "") 
+                    diff = (f_obj.date() - lun_act.date()).days
+                    idx_g = diff // 7  # Matemática para 4 semanas
+                    
+                    if 0 <= idx_g <= 3:
+                        f_o_g, b_t = None, -1
+                        for n_f, f_d in enumerate(datos_horarios_canc, start=1):
+                            if "hora" in " ".join([str(c).lower() for c in f_d]):
+                                b_t += 1
+                                continue
+                            if b_t == idx_g and len(f_d) > (c_h-1) and str(f_d[c_h-1]).strip().zfill(5) == h_c:
+                                f_o_g = n_f
+                                break
+                        if f_o_g:
+                            hoja_canc.update_cell(f_o_g, c_c, "") 
                 except Exception as e: 
-                    print(f"Error actualizando celda de Cancelación: {e}")
+                    print(f"Error actualizando grilla de Cancelación: {e}")
                     
                 sesiones[num_telefono]["estado"] = "inicio"
-                response.message(f"Turno cancelado. 🤝")
+                response.message(f"Turno cancelado exitosamente. 🤝")
             else:
-                response.message(f"No encontré el turno.")
+                response.message(f"No encontré tu turno a esa hora.")
         else:
-            response.message("Usá: *Cancelar 8*")
+            response.message("Para cancelar, escribí la hora (ej: *Cancelar 10* o *Cancelar 15:30*)")
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     sesiones[num_telefono]["estado"] = "inicio"
-    response.message("¡Hola! 🤖 Bienvenido a la barbería IB.\n⚠️ Recordá que trabajamos con 15 min de tolerancia.\n\n👉 *1* - Ver turnos disponibles")
+    response.message("¡Hola! 🤖 Bienvenido a la barbería.\n⚠️ Recordá que trabajamos con 15 min de tolerancia.\n\n👉 *1* - Ver turnos disponibles")
     return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
 @app.get("/")
