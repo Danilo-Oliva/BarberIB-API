@@ -3,3 +3,4 @@ __pycache__/
 .env
 .vscode/
 test_sheet.py
+.venv/
