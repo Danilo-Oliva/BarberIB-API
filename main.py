@@ -8,7 +8,7 @@ import os
 import json
 import re
 
-# --- CONFIGURACIÓN PARA LA NUBE (RAILWAY) ---
+# --- CONFIGURACIÓN PARA LA NUBE (RAILWAY/RENDER) ---
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
@@ -40,7 +40,6 @@ tz_arg = pytz.timezone("America/Argentina/Buenos_Aires")
 DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 DIAS_LABORABLES = [0, 1, 2, 3, 4, 5, 6]
 
-
 def quitar_tildes(texto):
     return (
         texto.replace("á", "a")
@@ -49,7 +48,6 @@ def quitar_tildes(texto):
         .replace("ó", "o")
         .replace("ú", "u")
     )
-
 
 def obtener_horas_por_dia(datos_horarios, weekday, semana_index):
     col_idx = weekday * 2
@@ -70,7 +68,6 @@ def obtener_horas_por_dia(datos_horarios, weekday, semana_index):
 
     return list(dict.fromkeys(horas))
 
-
 def extraer_hora(msg):
     match = re.search(r"(\d{1,2})(?:[:.](\d{2}))?(?:\s*(?:hs|h|hrs|horas))?", msg)
     if match:
@@ -79,7 +76,6 @@ def extraer_hora(msg):
         if 0 <= hora <= 23:
             return f"{hora:02d}:{minuto}"
     return None
-
 
 @app.post("/whatsapp")
 async def whatsapp(
@@ -105,7 +101,6 @@ async def whatsapp(
 
     print(f"DEBUG: Tel: {num_telefono} | Msg: {msg} | Estado: {estado_actual}")
 
-    # Seleccionar la grilla del barbero correcto según la sesión
     barbero_id = sesiones[num_telefono].get("barbero_id", "1")
     hoja_activa = horarios_b2 if barbero_id == "2" else horarios_b1
     datos_horarios = hoja_activa.get_all_values()
@@ -122,8 +117,6 @@ async def whatsapp(
                     "horas": fila[2].strip() if len(fila) > 2 else "",
                     "motivo": fila[3].strip() if len(fila) > 3 else "",
                 }
-
-    # --- FLUJO DE MENÚ (MÁQUINA DE ESTADOS COMPLETA) ---
 
     # BOTÓN DE PÁNICO
     if msg == "0" and estado_actual != "inicio":
@@ -177,7 +170,7 @@ async def whatsapp(
                 content=str(response), media_type="application/xml; charset=utf-8"
             )
 
-    # PASO 3: ELEGIR SEMANA (MES ENTERO)
+    # PASO 3: ELEGIR SEMANA
     if estado_actual == "eligiendo_barbero":
         if msg in ["1", "2"]:
             sesiones[num_telefono]["barbero_id"] = msg
@@ -186,7 +179,6 @@ async def whatsapp(
             )
             sesiones[num_telefono]["estado"] = "eligiendo_semana"
 
-            # Actualizamos los datos para que el bot lea la hoja del barbero elegido
             hoja_activa = horarios_b2 if msg == "2" else horarios_b1
             datos_horarios = hoja_activa.get_all_values()
 
@@ -201,7 +193,7 @@ async def whatsapp(
                 content=str(response), media_type="application/xml; charset=utf-8"
             )
 
-    # PASO 4: SELECCIÓN DE DÍA (ACTUALIZADO PARA 4 SEMANAS)
+    # PASO 4: SELECCIÓN DE DÍA (Lectura dinámica sin importar en qué semana cae)
     if msg in ["1", "2", "3", "4"] and estado_actual == "eligiendo_semana":
         semana_elegida = int(msg)
         sesiones[num_telefono]["semana"] = semana_elegida
@@ -209,18 +201,27 @@ async def whatsapp(
 
         inicio_rango = (semana_elegida - 1) * 7
         fin_rango = semana_elegida * 7
-        idx_sem_grilla = semana_elegida - 1
 
         datos_agenda = agenda_sheet.get_all_values()
         dias_disponibles, mapa_dias, avisos_exc = [], {}, []
+        
+        # Referencia para calcular en qué bloque de Excel cae el día
+        lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
 
         for i in range(inicio_rango, fin_rango):
             fecha_dt = hoy_dt + datetime.timedelta(days=i)
             if fecha_dt.weekday() not in DIAS_LABORABLES:
                 continue
 
+            diff = (fecha_dt.date() - lun_act.date()).days
+            idx_g = diff // 7
+            
+            # Si el cálculo se pasa de la Semana 5 (índice 4), ignoramos
+            if idx_g > 4: 
+                continue
+
             horas_fijas = obtener_horas_por_dia(
-                datos_horarios, fecha_dt.weekday(), idx_sem_grilla
+                datos_horarios, fecha_dt.weekday(), idx_g
             )
             if not horas_fijas:
                 continue
@@ -249,7 +250,6 @@ async def whatsapp(
                                 h for h in horas_del_dia if ini <= h <= fin
                             ]
 
-            # Filtramos los ocupados asegurando que sean del mismo barbero
             ocupados = [
                 f[1].strip().zfill(5)
                 for f in datos_agenda
@@ -303,11 +303,17 @@ async def whatsapp(
                 sesiones[num_telefono]["estado"],
                 sesiones[num_telefono]["fecha_seleccionada"],
             ) = ("viendo_horarios", fecha_str)
-            idx_s = sesiones[num_telefono].get("semana", 1) - 1
+            
+            # Recalculamos el índice exacto para asegurarnos de leer el bloque correcto
+            f_obj = datetime.datetime.strptime(fecha_str, "%d/%m/%Y")
+            lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
+            diff = (f_obj.date() - lun_act.date()).days
+            idx_g = diff // 7
+            
             h_dia = obtener_horas_por_dia(
                 datos_horarios,
-                datetime.datetime.strptime(fecha_str, "%d/%m/%Y").weekday(),
-                idx_s,
+                f_obj.weekday(),
+                idx_g,
             )
 
             if (
@@ -320,7 +326,6 @@ async def whatsapp(
                         ini, fin = p[0].strip().zfill(5), p[1].strip().zfill(5)
                         h_dia = [h for h in h_dia if ini <= h <= fin]
 
-            # Filtramos los ocupados asegurando que sean del mismo barbero
             ocupadas = [
                 f[1].strip().zfill(5)
                 for f in agenda_sheet.get_all_values()
@@ -373,8 +378,12 @@ async def whatsapp(
         if h_des:
             fecha_r = sesiones[num_telefono].get("fecha_seleccionada")
             f_obj = datetime.datetime.strptime(fecha_r, "%d/%m/%Y")
-            idx_s = sesiones[num_telefono].get("semana", 1) - 1
-            h_val = obtener_horas_por_dia(datos_horarios, f_obj.weekday(), idx_s)
+            
+            lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
+            diff = (f_obj.date() - lun_act.date()).days
+            idx_g = diff // 7
+            
+            h_val = obtener_horas_por_dia(datos_horarios, f_obj.weekday(), idx_g)
 
             if fecha_r in excepciones and excepciones[fecha_r]["tipo"] == "especial":
                 if "-" in excepciones[fecha_r]["horas"]:
@@ -412,15 +421,11 @@ async def whatsapp(
                 if not nom:
                     nom = ProfileName if ProfileName else "Cliente"
 
-                # Rescatamos los datos guardados en la sesión
                 serv_nom = sesiones[num_telefono].get("servicio_nombre", "General")
                 serv_precio = sesiones[num_telefono].get("servicio_precio", "0")
                 barbero_nom = sesiones[num_telefono].get("barbero_nombre", "Barbero 1")
-
-                # Transformamos el texto del precio a un número entero
                 precio_num = int(serv_precio) if serv_precio.isdigit() else 0
 
-                # Guardamos las 7 columnas avisándole a Sheets que lo lea como input de usuario
                 agenda_sheet.append_row(
                     [
                         fecha_r,
@@ -434,17 +439,12 @@ async def whatsapp(
                     value_input_option="USER_ENTERED",
                 )
 
-                # Tachamos en la grilla del barbero correcto (Matemática para 4 semanas)
+                # Tachamos en la grilla del barbero correcto permitiendo hasta la SEMANA 5
                 try:
                     c_h = (f_obj.weekday() * 2) + 1
                     c_c = c_h + 1
-                    lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
-                    diff = (f_obj.date() - lun_act.date()).days
-                    idx_g = (
-                        diff // 7
-                    )  # Magia: Divide por 7 para saber en qué semana cae (0, 1, 2 o 3)
 
-                    if 0 <= idx_g <= 3:
+                    if 0 <= idx_g <= 4:
                         f_o, b_t = None, -1
                         for n_f, f_d in enumerate(datos_horarios, start=1):
                             if "hora" in " ".join(
@@ -490,7 +490,6 @@ async def whatsapp(
             datos_a = agenda_sheet.get_all_values()
             f_o, f_c, barbero_canc = None, None, None
 
-            # Buscamos la fila en la agenda
             for i, f in enumerate(datos_a):
                 if (
                     len(f) >= 4
@@ -504,7 +503,6 @@ async def whatsapp(
             if f_o:
                 agenda_sheet.delete_rows(f_o)
                 try:
-                    # Seleccionamos el Excel del barbero correcto para borrar el nombre
                     hoja_canc = (
                         horarios_b2 if barbero_canc == "Barbero 2" else horarios_b1
                     )
@@ -515,9 +513,9 @@ async def whatsapp(
                     c_c = c_h + 1
                     lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
                     diff = (f_obj.date() - lun_act.date()).days
-                    idx_g = diff // 7  # Matemática para 4 semanas
+                    idx_g = diff // 7 
 
-                    if 0 <= idx_g <= 3:
+                    if 0 <= idx_g <= 4:
                         f_o_g, b_t = None, -1
                         for n_f, f_d in enumerate(datos_horarios_canc, start=1):
                             if "hora" in " ".join([str(c).lower() for c in f_d]):
