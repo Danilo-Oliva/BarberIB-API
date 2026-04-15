@@ -159,7 +159,7 @@ async def whatsapp(
             sesiones[num_telefono]["servicio_precio"] = servicio_elegido["precio"]
             sesiones[num_telefono]["estado"] = "eligiendo_barbero"
 
-            res_text = f"Elegiste *{servicio_elegido['nombre']}*.\n\n¿Con quién te querés atender?\n\n1️⃣ Barbero 1\n2️⃣ Barbero 2\n\n👉 Respondé con 1 o 2.\n↩️ *0* para volver a empezar"
+            res_text = f"Elegiste *{servicio_elegido['nombre']}*.\n\n¿Con quién te querés atender?\n\n1️⃣ Nacho\n2️⃣ Sebas\n\n👉 Respondé con 1 o 2.\n↩️ *0* para volver a empezar"
             response.message(res_text)
             return Response(
                 content=str(response), media_type="application/xml; charset=utf-8"
@@ -175,7 +175,7 @@ async def whatsapp(
         if msg in ["1", "2"]:
             sesiones[num_telefono]["barbero_id"] = msg
             sesiones[num_telefono]["barbero_nombre"] = (
-                "Barbero 1" if msg == "1" else "Barbero 2"
+                "Nacho" if msg == "1" else "Sebas"
             )
             sesiones[num_telefono]["estado"] = "eligiendo_semana"
 
@@ -547,7 +547,7 @@ async def whatsapp(
 
     sesiones[num_telefono]["estado"] = "inicio"
     response.message(
-        "¡Hola! 🤖 Bienvenido a la barbería.\n⚠️ Recordá que trabajamos con 15 min de tolerancia.\n\n👉 *1* - Ver turnos disponibles"
+        "¡Hola! 🤖 Bienvenido a IB Studio. \n Me llamo IBot y soy el esclavo de Nachito, por favor seguí mis instrucciones‼️. \n⚠️ Recordá que el turno tiene máximo 15 min de tolerancia.\n\n👉 Si querés continuar con el pedido del turno, mandá un 1"
     )
     return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
