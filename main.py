@@ -150,34 +150,65 @@ async def whatsapp(
         )
     # PASO 1.5: INICIAR CANCELACIÓN (El cliente tocó 2)
     if msg == "2" and estado_actual == "inicio":
-        sesiones[num_telefono]["estado"] = "cancelando_turno"
-        response.message(
-            "Entendido. Para cancelar tu turno, por favor escribí *la hora* que tenías reservada (ej: *10* o *15:30*).\n\n↩️ *0* para volver"
-        )
+        datos_a = agenda_sheet.get_all_values()
+        turnos_encontrados = []
+        
+        # Buscar TODOS los turnos registrados con el teléfono de este cliente
+        for i, f in enumerate(datos_a):
+            if len(f) >= 4 and f[3] == num_telefono:
+                f_fecha = f[0]
+                f_hora = f[1].strip().zfill(5)
+                f_barbero = f[6] if len(f) >= 7 else "Nacho"
+                
+                # Omitimos turnos viejos asegurando que no busque el de ayer
+                if datetime.datetime.strptime(f_fecha, "%d/%m/%Y").date() >= hoy_dt.date():
+                    turnos_encontrados.append({
+                        "fecha": f_fecha, 
+                        "hora": f_hora, 
+                        "barbero": f_barbero
+                    })
+        
+        if not turnos_encontrados:
+            response.message("No encontré ningún turno futuro registrado con tu número de teléfono. 🤷‍♂️\n\n↩️ *0* para volver al menú")
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+            
+        # Guardamos la lista en la sesión del usuario
+        sesiones[num_telefono]["turnos_cancelables"] = turnos_encontrados
+        sesiones[num_telefono]["estado"] = "eligiendo_turno_cancelar"
+        
+        res_text = "Encontré estos turnos a tu nombre. ¿Cuál querés cancelar?\n\n"
+        for idx, t in enumerate(turnos_encontrados, start=1):
+            res_text += f"{idx}️⃣ {t['fecha']} a las {t['hora']} con {t['barbero']}\n"
+            
+        res_text += "\n👉 Respondé con el número del turno (ej: 1).\n↩️ *0* para volver"
+        
+        response.message(res_text)
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
-    # PROCESAR LA CANCELACIÓN (El cliente nos dice la hora)
-    if estado_actual == "cancelando_turno" and msg != "0":
-        h_c = extraer_hora(msg)
-        if h_c:
-            datos_a = agenda_sheet.get_all_values()
-            f_o, f_c, barbero_canc = None, None, None
-
-            # Buscamos la fila en la agenda
-            for i, f in enumerate(datos_a):
-                if (
-                    len(f) >= 4
-                    and f[3] == num_telefono
-                    and f[1].strip().zfill(5) == h_c
-                ):
-                    f_o, f_c = i + 1, f[0]
-                    barbero_canc = f[6] if len(f) >= 7 else "Nacho"
+    # PROCESAR LA CANCELACIÓN (El cliente elige de la lista)
+    if estado_actual == "eligiendo_turno_cancelar" and msg != "0":
+        turnos_guardados = sesiones[num_telefono].get("turnos_cancelables", [])
+        
+        if msg.isdigit() and 1 <= int(msg) <= len(turnos_guardados):
+            turno_elegido = turnos_guardados[int(msg) - 1]
+            f_c = turno_elegido["fecha"]
+            h_c = turno_elegido["hora"]
+            barbero_canc = turno_elegido["barbero"]
+            
+            # Volvemos a leer la agenda por seguridad y borramos la fila exacta
+            datos_a_actualizados = agenda_sheet.get_all_values()
+            fila_a_borrar = None
+            
+            for i, f in enumerate(datos_a_actualizados):
+                if len(f) >= 4 and f[3] == num_telefono and f[0] == f_c and f[1].strip().zfill(5) == h_c:
+                    fila_a_borrar = i + 1
                     break
-
-            if f_o:
-                agenda_sheet.delete_rows(f_o)
+            
+            if fila_a_borrar:
+                agenda_sheet.delete_rows(fila_a_borrar)
+                
+                # Borramos de la grilla visual del barbero
                 try:
-                    # Ojo acá: le puse "Sebas" para que coincida exactamente con tu menú
                     hoja_canc = horarios_b2 if barbero_canc == "Sebas" else horarios_b1
                     datos_horarios_canc = hoja_canc.get_all_values()
 
@@ -207,11 +238,12 @@ async def whatsapp(
                     print(f"Error actualizando grilla de Cancelación: {e}")
 
                 sesiones[num_telefono]["estado"] = "inicio"
-                response.message("Turno cancelado exitosamente. 🤝\n\nNos vemos la próxima.")
+                response.message("Turno cancelado exitosamente. 🤝\n\nEl espacio ya está libre de nuevo.")
             else:
-                response.message("No encontré ningún turno tuyo a esa hora. Revisá bien y volvé a escribirla.\n\n↩️ *0* para volver")
+                response.message("Hubo un problema al cancelar. Quizás ya había sido borrado. 🤷‍♂️\n\n↩️ *0* para empezar de nuevo")
+                sesiones[num_telefono]["estado"] = "inicio"
         else:
-            response.message("No entendí la hora. Escribila así: *10* o *15:30*.\n\n↩️ *0* para volver")
+            response.message("Ese número no está en la lista. Por favor, respondé con un número válido (ej: *1*).\n\n↩️ *0* para volver")
             
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
