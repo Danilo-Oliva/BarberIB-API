@@ -148,6 +148,67 @@ async def whatsapp(
         return Response(
             content=str(response), media_type="application/xml; charset=utf-8"
         )
+    if msg == "2" and estado_actual == "inicio":
+        h_c = extraer_hora(partes)
+        if h_c:
+            datos_a = agenda_sheet.get_all_values()
+            f_o, f_c, barbero_canc = None, None, None
+
+            for i, f in enumerate(datos_a):
+                if (
+                    len(f) >= 4
+                    and f[3] == num_telefono
+                    and f[1].strip().zfill(5) == h_c
+                ):
+                    f_o, f_c = i + 1, f[0]
+                    barbero_canc = f[6] if len(f) >= 7 else "Nacho"
+                    break
+
+            if f_o:
+                agenda_sheet.delete_rows(f_o)
+                try:
+                    hoja_canc = (
+                        horarios_b2 if barbero_canc == "Seba" else horarios_b1
+                    )
+                    datos_horarios_canc = hoja_canc.get_all_values()
+
+                    f_obj = datetime.datetime.strptime(f_c, "%d/%m/%Y")
+                    c_h = (f_obj.weekday() * 2) + 1
+                    c_c = c_h + 1
+                    lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
+                    diff = (f_obj.date() - lun_act.date()).days
+                    idx_g = diff // 7 
+
+                    if 0 <= idx_g <= 4:
+                        f_o_g, b_t = None, -1
+                        for n_f, f_d in enumerate(datos_horarios_canc, start=1):
+                            if "hora" in " ".join([str(c).lower() for c in f_d]):
+                                b_t += 1
+                                continue
+                            if (
+                                b_t == idx_g
+                                and len(f_d) > (c_h - 1)
+                                and str(f_d[c_h - 1]).strip().zfill(5) == h_c
+                            ):
+                                f_o_g = n_f
+                                break
+                        if f_o_g:
+                            hoja_canc.update_cell(f_o_g, c_c, "")
+                except Exception as e:
+                    print(f"Error actualizando grilla de Cancelación: {e}")
+
+                sesiones[num_telefono]["estado"] = "inicio"
+                response.message(f"Turno cancelado exitosamente. 🤝")
+            else:
+                response.message(f"No encontré tu turno a esa hora.")
+        else:
+            response.message(
+                "Para cancelar, escribí la hora (ej: *Cancelar 10* o *Cancelar 15:30*)"
+            )
+        return Response(
+            content=str(response), media_type="application/xml; charset=utf-8"
+        )
+
 
     # PASO 2: ELEGIR BARBERO
     if estado_actual == "eligiendo_servicio":
@@ -483,71 +544,9 @@ async def whatsapp(
                 content=str(response), media_type="application/xml; charset=utf-8"
             )
 
-    # CANCELAR
-    if "cancelar" in msg:
-        h_c = extraer_hora(partes)
-        if h_c:
-            datos_a = agenda_sheet.get_all_values()
-            f_o, f_c, barbero_canc = None, None, None
-
-            for i, f in enumerate(datos_a):
-                if (
-                    len(f) >= 4
-                    and f[3] == num_telefono
-                    and f[1].strip().zfill(5) == h_c
-                ):
-                    f_o, f_c = i + 1, f[0]
-                    barbero_canc = f[6] if len(f) >= 7 else "Barbero 1"
-                    break
-
-            if f_o:
-                agenda_sheet.delete_rows(f_o)
-                try:
-                    hoja_canc = (
-                        horarios_b2 if barbero_canc == "Barbero 2" else horarios_b1
-                    )
-                    datos_horarios_canc = hoja_canc.get_all_values()
-
-                    f_obj = datetime.datetime.strptime(f_c, "%d/%m/%Y")
-                    c_h = (f_obj.weekday() * 2) + 1
-                    c_c = c_h + 1
-                    lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
-                    diff = (f_obj.date() - lun_act.date()).days
-                    idx_g = diff // 7 
-
-                    if 0 <= idx_g <= 4:
-                        f_o_g, b_t = None, -1
-                        for n_f, f_d in enumerate(datos_horarios_canc, start=1):
-                            if "hora" in " ".join([str(c).lower() for c in f_d]):
-                                b_t += 1
-                                continue
-                            if (
-                                b_t == idx_g
-                                and len(f_d) > (c_h - 1)
-                                and str(f_d[c_h - 1]).strip().zfill(5) == h_c
-                            ):
-                                f_o_g = n_f
-                                break
-                        if f_o_g:
-                            hoja_canc.update_cell(f_o_g, c_c, "")
-                except Exception as e:
-                    print(f"Error actualizando grilla de Cancelación: {e}")
-
-                sesiones[num_telefono]["estado"] = "inicio"
-                response.message(f"Turno cancelado exitosamente. 🤝")
-            else:
-                response.message(f"No encontré tu turno a esa hora.")
-        else:
-            response.message(
-                "Para cancelar, escribí la hora (ej: *Cancelar 10* o *Cancelar 15:30*)"
-            )
-        return Response(
-            content=str(response), media_type="application/xml; charset=utf-8"
-        )
-
     sesiones[num_telefono]["estado"] = "inicio"
     response.message(
-        "¡Hola! 🤖 Bienvenido a IB Studio. \n Me llamo IBot y soy el esclavo de Nachito, por favor seguí mis instrucciones‼️. \n⚠️ Recordá que el turno tiene máximo 15 min de tolerancia.\n\n👉 Si querés continuar con el pedido del turno, mandá un 1"
+        "¡Hola! 🤖 Bienvenido a IB Studio. \n Me llamo IBot y soy el esclavo de Nachito, por favor seguí mis instrucciones‼️. \n⚠️ Recordá que el turno tiene máximo 15 min de tolerancia.\n\n👉1️⃣ Para pedir turno \n👉2️⃣ Para cancelar turno"
     )
     return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
