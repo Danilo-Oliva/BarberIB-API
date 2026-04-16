@@ -148,12 +148,22 @@ async def whatsapp(
         return Response(
             content=str(response), media_type="application/xml; charset=utf-8"
         )
+    # PASO 1.5: INICIAR CANCELACIÓN (El cliente tocó 2)
     if msg == "2" and estado_actual == "inicio":
-        h_c = extraer_hora(partes)
+        sesiones[num_telefono]["estado"] = "cancelando_turno"
+        response.message(
+            "Entendido. Para cancelar tu turno, por favor escribí *la hora* que tenías reservada (ej: *10* o *15:30*).\n\n↩️ *0* para volver"
+        )
+        return Response(content=str(response), media_type="application/xml; charset=utf-8")
+
+    # PROCESAR LA CANCELACIÓN (El cliente nos dice la hora)
+    if estado_actual == "cancelando_turno" and msg != "0":
+        h_c = extraer_hora(msg)
         if h_c:
             datos_a = agenda_sheet.get_all_values()
             f_o, f_c, barbero_canc = None, None, None
 
+            # Buscamos la fila en la agenda
             for i, f in enumerate(datos_a):
                 if (
                     len(f) >= 4
@@ -167,9 +177,8 @@ async def whatsapp(
             if f_o:
                 agenda_sheet.delete_rows(f_o)
                 try:
-                    hoja_canc = (
-                        horarios_b2 if barbero_canc == "Seba" else horarios_b1
-                    )
+                    # Ojo acá: le puse "Sebas" para que coincida exactamente con tu menú
+                    hoja_canc = horarios_b2 if barbero_canc == "Sebas" else horarios_b1
                     datos_horarios_canc = hoja_canc.get_all_values()
 
                     f_obj = datetime.datetime.strptime(f_c, "%d/%m/%Y")
@@ -198,16 +207,13 @@ async def whatsapp(
                     print(f"Error actualizando grilla de Cancelación: {e}")
 
                 sesiones[num_telefono]["estado"] = "inicio"
-                response.message(f"Turno cancelado exitosamente. 🤝")
+                response.message("Turno cancelado exitosamente. 🤝\n\nNos vemos la próxima.")
             else:
-                response.message(f"No encontré tu turno a esa hora.")
+                response.message("No encontré ningún turno tuyo a esa hora. Revisá bien y volvé a escribirla.\n\n↩️ *0* para volver")
         else:
-            response.message(
-                "Para cancelar, escribí la hora (ej: *Cancelar 10* o *Cancelar 15:30*)"
-            )
-        return Response(
-            content=str(response), media_type="application/xml; charset=utf-8"
-        )
+            response.message("No entendí la hora. Escribila así: *10* o *15:30*.\n\n↩️ *0* para volver")
+            
+        return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
 
     # PASO 2: ELEGIR BARBERO
@@ -484,7 +490,7 @@ async def whatsapp(
 
                 serv_nom = sesiones[num_telefono].get("servicio_nombre", "General")
                 serv_precio = sesiones[num_telefono].get("servicio_precio", "0")
-                barbero_nom = sesiones[num_telefono].get("barbero_nombre", "Barbero 1")
+                barbero_nom = sesiones[num_telefono].get("barbero_nombre", "Nacho")
                 precio_num = int(serv_precio) if serv_precio.isdigit() else 0
 
                 agenda_sheet.append_row(
