@@ -29,8 +29,8 @@ app = FastAPI()
 # --- ABRIR SHEETS UNA SOLA VEZ AL INICIO ---
 archivo = client_sheets.open("Agenda_Barberia")
 agenda_sheet = archivo.worksheet("Agenda")
-horarios_b1 = archivo.worksheet("Horarios_Barbero1")
-horarios_b2 = archivo.worksheet("Horarios_Barbero2")
+horarios_b1 = archivo.worksheet("Nacho")
+horarios_b2 = archivo.worksheet("Sebas")
 servicios_sheet = archivo.worksheet("Servicios")
 conf_sheet = archivo.worksheet("Configuracion")
 
