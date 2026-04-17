@@ -312,11 +312,11 @@ async def whatsapp(
                 content=str(response), media_type="application/xml; charset=utf-8"
             )
 
-    # PASO 4: SELECCIÓN DE DÍA
-    if estado_actual == "eligiendo_semana" and (msg in ["1", "2", "3", "4"] or msg == "*"):
+# PASO 4: SELECCIÓN DE DÍA
+    if estado_actual == "eligiendo_semana" and msg in ["1", "2", "3", "4", "8"]:
         
-        # Si el usuario apretó "*", no cambiamos la semana, usamos la que ya tenía guardada para volver a mostrarle los días
-        if msg != "*":
+        # Si el usuario apretó "8", no cambiamos la semana, usamos la que ya tenía guardada
+        if msg != "8":
             semana_elegida = int(msg)
             sesiones[num_telefono]["semana"] = semana_elegida
         else:
@@ -335,7 +335,6 @@ async def whatsapp(
         for i in range(inicio_rango, fin_rango):
             fecha_dt = lun_act + datetime.timedelta(days=i) 
             
-            # Si el día ya pasó en la vida real, lo salteamos para no mostrar turnos viejos
             if fecha_dt.date() < hoy_dt.date():
                 continue
                 
@@ -401,9 +400,9 @@ async def whatsapp(
             res_text = f"Tenemos turnos para el {txt_d}."
             if avisos_exc:
                 res_text += "\n\n" + "\n".join(avisos_exc)
-            res_text += "\n\n👉 Elija día para ver horarios (ej: Lunes)\n↩️ *** para elegir otra semana\n↩️ *0* para menú principal"
+            res_text += "\n\n👉 Elija día para ver horarios (ej: Lunes)\n↩️ *8* para elegir otra semana\n↩️ *0* para menú principal"
         else:
-            res_text = "No hay turnos disponibles para esta semana. 😭\n\n↩️ *** para elegir otra semana\n↩️ *0* para menú principal"
+            res_text = "No hay turnos disponibles para esta semana. 😭\n\n↩️ *8* para elegir otra semana\n↩️ *0* para menú principal"
             
         response.message(res_text)
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
@@ -411,14 +410,13 @@ async def whatsapp(
     # PASO 5: VER HORARIOS
     if estado_actual == "eligiendo_dia" and "cancelar" not in msg:
         
-        # Lógica para volver a elegir semana si apretó el asterisco
-        if msg == "*":
-            sesiones[num_telefono]["estado"] = "eligiendo_barbero"
+        # Lógica para volver a elegir semana si apretó "8"
+        if msg == "8":
+            sesiones[num_telefono]["estado"] = "eligiendo_semana"
             barbero = sesiones[num_telefono].get("barbero_nombre", "Barbero")
             res_text = f"Ok, volvemos atrás. Estás agendando con {barbero}.\n\n¿Para cuándo buscás turno?\n\n1️⃣ Esta semana\n2️⃣ La próxima semana\n3️⃣ En 15 días\n4️⃣ En 3 semanas\n\n👉 Respondé con un número del 1 al 4.\n↩️ *0* para menú principal"
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
-
 
         mapa = sesiones[num_telefono].get("mapa_dias", {})
         dia_det = next((d for d in mapa.keys() if quitar_tildes(d) in msg_limpio), None)
@@ -462,27 +460,27 @@ async def whatsapp(
 
             if dispo:
                 res_text = f"Horarios para el {dia_det.capitalize()} ({fecha_str}):\n\n" + "\n".join(dispo)
-                res_text += "\n\n👉 Decime hora y nombre (ej: *10 Nachito*)\n↩️ *** para elegir otro día\n↩️ *0* para menú principal"
+                res_text += "\n\n👉 Decime hora y nombre (ej: *10 Nachito*)\n↩️ *8* para elegir otro día\n↩️ *0* para menú principal"
             else:
-                res_text = "Día lleno. 😭\n\n↩️ *** para elegir otro día\n↩️ *0* para menú principal"
+                res_text = "Día lleno. 😭\n\n↩️ *8* para elegir otro día\n↩️ *0* para menú principal"
                 
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
             dia_i = next((d for d in DIAS_SEMANA if quitar_tildes(d) in msg_limpio), None)
             res_text = f"El día *{dia_i.capitalize()}* no está disponible." if dia_i else "No entendí el día."
-            response.message(res_text + " Revisá la lista arriba. 👆\n↩️ *** para elegir otra semana\n↩️ *0* para menú principal")
+            response.message(res_text + " Revisá la lista arriba. 👆\n↩️ *8* para elegir otra semana\n↩️ *0* para menú principal")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     # PASO 6: RESERVAR
     if estado_actual == "viendo_horarios" and "cancelar" not in msg:
         h_des = extraer_hora(msg)
         
-        # Lógica para volver a elegir día si apretó el asterisco
-        if msg == "*":
+        # Lógica para volver a elegir día si apretó el 8
+        if msg == "8":
             sesiones[num_telefono]["estado"] = "eligiendo_semana"
-            msg = "*" # Truco para que vuelva a entrar al PASO 4 y le muestre los días de su semana
-            response.message("Ok, volvemos a elegir día. Por favor mandá un *\** nuevamente para ver los días de tu semana elegida, o un *0* para reiniciar todo.")
+            msg = "8" # Truco para que vuelva a entrar al PASO 4 y le muestre los días de su semana
+            response.message("Ok, volvemos a elegir día. Por favor mandá un *8* nuevamente para ver los días de la semana que habías elegido, o un *0* para reiniciar todo.")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
         if h_des:
