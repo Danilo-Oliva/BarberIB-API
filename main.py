@@ -33,6 +33,7 @@ horarios_b1 = archivo.worksheet("Nacho")
 horarios_b2 = archivo.worksheet("Sebas")
 servicios_sheet = archivo.worksheet("Servicios")
 conf_sheet = archivo.worksheet("Configuracion")
+catalogo_sheet = archivo.worksheet("Catalogo")
 
 sesiones = {}
 tz_arg = pytz.timezone("America/Argentina/Buenos_Aires")
@@ -573,10 +574,38 @@ async def whatsapp(
                 except Exception as e:
                     print(f"Error actualizando grilla de Reserva: {e}")
 
+                # 1. Armamos la base del mensaje de confirmación
+                mensaje_final = f"¡Listo {nom}! Turno confirmado para el {fecha_r} a las {h_des} con {barbero_nom}. ✂️\n\n⚠️ Recordá que tenemos 15 min de tolerancia.\n\n"
+
+                # 2. Leemos el catálogo y se lo PEGAMOS al mismo mensaje
+                try:
+                    datos_catalogo = catalogo_sheet.get_all_values()
+                    texto_catalogo = "🛍️ *Aprovechá y mirá nuestros productos disponibles:*\n"
+                    hay_productos = False
+                    
+                    for fila in datos_catalogo[1:]:
+                        if len(fila) >= 4:
+                            nombre = fila[0].strip()
+                            precio = fila[1].strip()
+                            stock = fila[2].strip().lower()
+                            mostrar = fila[3].strip().lower()
+                            
+                            # Si hay stock y se quiere mostrar, lo sumamos a la lista
+                            if stock in ["si", "sí"] and mostrar in ["si", "sí"]:
+                                texto_catalogo += f"🔹 {nombre} - ${precio}\n"
+                                hay_productos = True
+                    
+                    # Si encontró al menos 1 producto, pegamos el catálogo al mensaje final
+                    if hay_productos:
+                        texto_catalogo += "\n👉 Si querés alguno, avisale a tu barbero."
+                        mensaje_final += texto_catalogo
+                        
+                except Exception as e:
+                    print(f"Error leyendo catálogo: {e}")
+
+                # 3. Cerramos la sesión y enviamos UN SOLO mensaje con todo junto
                 sesiones[num_telefono]["estado"] = "inicio"
-                response.message(
-                    f"¡Listo {nom}! Turno confirmado para el {fecha_r} a las {h_des} con {barbero_nom}. ✂️\n\n⚠️ Recordá que tenemos 15 min de tolerancia."
-                )
+                response.message(mensaje_final)
             else:
                 response.message(
                     "Ese horario no está disponible o lo escribiste mal. Revisá la lista arriba e intentá de nuevo (ej: *10 Nachito*). 👆\n↩️ *** para volver"
