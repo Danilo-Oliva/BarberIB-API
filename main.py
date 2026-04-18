@@ -575,7 +575,7 @@ async def whatsapp(
                     print(f"Error actualizando grilla de Reserva: {e}")
 
                 # 1. Armamos la base del mensaje de confirmación
-                mensaje_final = f"¡Listo {nom}! Turno confirmado para el {fecha_r} a las {h_des} con {barbero_nom}. ✂️\n\n⚠️ Recordá que tenemos 15 min de tolerancia.\n\n"
+                mensaje_final = f"¡Listo {nom}! Turno confirmado para el {fecha_r} a las {h_des} con {barbero_nom}. ✂️\n\n⚠️ Recordá que tenemos 15 min de tolerancia. En caso de no presentarse o de cancelar en las 24 horas previas al turno, se deberá abonar el 50% del costo del servicio solicitado.\n\n"
 
                 # 2. Leemos el catálogo y se lo PEGAMOS al mismo mensaje
                 try:
