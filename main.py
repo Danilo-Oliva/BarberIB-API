@@ -395,7 +395,8 @@ async def whatsapp(
                     if all(h in horas_disp_reales for h in bloque):
                         inicios_validos.append(bloque[0])
 
-            sesiones[num_telefono]["horas_fijas_del_dia"] = h_dia
+            sesiones[num_telefono]["horas_fijas_del_dia"] = h_dia # La grilla completa
+            sesiones[num_telefono]["inicios_validos"] = inicios_validos # Solo los que sirven de arranque
 
             if inicios_validos:
                 dispo = [f"✅ {h}" for h in inicios_validos]
@@ -413,6 +414,9 @@ async def whatsapp(
     # ==========================================
     # PASO 6: INICIAR LOOP DE NOMBRES Y SERVICIOS
     # ==========================================
+    # ==========================================
+    # PASO 6: INICIAR LOOP DE NOMBRES Y SERVICIOS
+    # ==========================================
     if estado_actual == "viendo_horarios" and "cancelar" not in msg:
         h_des = extraer_hora(msg)
         
@@ -424,35 +428,38 @@ async def whatsapp(
         if h_des:
             cantidad_turnos = sesiones[num_telefono].get("cantidad_turnos", 1)
             h_dia = sesiones[num_telefono].get("horas_fijas_del_dia", [])
+            inicios_validos = sesiones[num_telefono].get("inicios_validos", [])
             
-            if h_des in h_dia:
+            # EL FILTRO PATOVICA: ¿La hora que escribió está en la lista permitida?
+            if h_des in inicios_validos:
                 idx_arranque = h_dia.index(h_des)
-                if idx_arranque + cantidad_turnos <= len(h_dia):
-                    bloque_horas = h_dia[idx_arranque : idx_arranque + cantidad_turnos]
-                    
-                    # Preparar el terreno para el Loop
-                    sesiones[num_telefono]["bloque_horas"] = bloque_horas
-                    sesiones[num_telefono]["turnos_a_guardar"] = []
-                    sesiones[num_telefono]["indice_turno_actual"] = 0
-                    sesiones[num_telefono]["estado"] = "ingresando_datos_turnos"
-                    
-                    # Cargar lista de servicios para mostrársela al cliente
-                    datos_servicios = servicios_sheet.get_all_values()
-                    lista_servicios = []
-                    texto_menu = "💇‍♂️ *Lista de Servicios:*\n"
-                    for i, fila in enumerate(datos_servicios[1:], start=1):
-                        if len(fila) >= 2 and fila[0].strip():
-                            lista_servicios.append({"id": str(i), "nombre": fila[0].strip(), "precio": fila[1].strip()})
-                            texto_menu += f"💈 *{i}* - {fila[0].strip()} (${fila[1].strip()})\n"
-                    
-                    sesiones[num_telefono]["lista_servicios"] = lista_servicios
-
-                    res_text = f"¡Genial! Bloqueamos desde las {bloque_horas[0]}. ⏱️\n\n{texto_menu}\n\n👉 Para el **Turno 1 ({bloque_horas[0]})**, escribime el *Nombre* y el *Número de Servicio* (Ej: *Nacho 1*)."
-                    response.message(res_text)
-                    return Response(content=str(response), media_type="application/xml; charset=utf-8")
+                bloque_horas = h_dia[idx_arranque : idx_arranque + cantidad_turnos]
                 
-            response.message("Ese horario no permite la cantidad de turnos que pediste. Revisá la lista arriba e intentá de nuevo. 👆")
-            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+                # Preparar el terreno para el Loop
+                sesiones[num_telefono]["bloque_horas"] = bloque_horas
+                sesiones[num_telefono]["turnos_a_guardar"] = []
+                sesiones[num_telefono]["indice_turno_actual"] = 0
+                sesiones[num_telefono]["estado"] = "ingresando_datos_turnos"
+                
+                # Cargar lista de servicios para mostrársela al cliente
+                datos_servicios = servicios_sheet.get_all_values()
+                lista_servicios = []
+                texto_menu = "💇‍♂️ *Lista de Servicios:*\n"
+                for i, fila in enumerate(datos_servicios[1:], start=1):
+                    if len(fila) >= 2 and fila[0].strip():
+                        lista_servicios.append({"id": str(i), "nombre": fila[0].strip(), "precio": fila[1].strip()})
+                        texto_menu += f"💈 *{i}* - {fila[0].strip()} (${fila[1].strip()})\n"
+                
+                sesiones[num_telefono]["lista_servicios"] = lista_servicios
+
+                res_text = f"¡Genial! Bloqueamos desde las {bloque_horas[0]}. ⏱️\n\n{texto_menu}\n\n👉 Para el **Turno 1 ({bloque_horas[0]})**, escribime el *Nombre* y el *Número de Servicio* (Ej: *Nacho 1*)."
+                response.message(res_text)
+                return Response(content=str(response), media_type="application/xml; charset=utf-8")
+                
+            else:
+                # SI TIRA CUALQUIER OTRA HORA, LO FRENAMOS:
+                response.message("⚠️ Ese horario no está disponible o no permite la cantidad de turnos que pediste. Revisá la lista arriba y escribí uno de los horarios marcados con ✅ (ej: *16:00*).")
+                return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
             response.message("No entendí la hora. Escribí el horario de inicio (ej: *10* o *10:30*).")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
