@@ -138,6 +138,26 @@ async def whatsapp(
         sesiones[num_telefono] = {"estado": "inicio"}
         estado_actual = "inicio"
         msg = "1" # Forzamos a que vuelva a pedir turno
+    
+    # ==========================================
+    # ENRUTADOR DE BOTÓN VOLVER (8) -
+    # ==========================================
+    if msg == "8":
+        if estado_actual == "viendo_horarios":
+            # El cliente quiere volver a elegir día. 
+            # Le cambiamos el estado en el aire y NO hacemos return.
+            # Como el código sigue bajando, va a caer directo en el PASO 4 y mostrará los días.
+            estado_actual = "eligiendo_semana"
+            sesiones[num_telefono]["estado"] = "eligiendo_semana"
+            
+        elif estado_actual == "eligiendo_dia":
+            # El cliente quiere volver a elegir semana.
+            sesiones[num_telefono]["estado"] = "eligiendo_cantidad_turnos"
+            estado_actual = "eligiendo_cantidad_turnos"
+            barbero = sesiones[num_telefono].get("barbero_nombre", "Barbero")
+            res_text = f"Ok, volvemos atrás. Estás agendando con {barbero}.\n\n¿Para cuándo buscan turno?\n\n1️⃣ Esta semana\n2️⃣ La próxima semana\n3️⃣ En 15 días\n4️⃣ En 3 semanas\n\n👉 Respondé con un número del 1 al 4.\n↩️ *0* para volver a empezar"
+            response.message(res_text)
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     # ==========================================
     # PASO 1: ELEGIR CANTIDAD DE TURNOS
@@ -348,12 +368,6 @@ async def whatsapp(
     # PASO 5: VER HORARIOS DE INICIO
     # ==========================================
     if estado_actual == "eligiendo_dia" and "cancelar" not in msg:
-        if msg == "8":
-            sesiones[num_telefono]["estado"] = "eligiendo_semana"
-            barbero = sesiones[num_telefono].get("barbero_nombre", "Barbero")
-            response.message(f"Ok, volvemos atrás. Estás agendando con {barbero}.\n\n¿Para cuándo buscan turno?\n1️⃣ Esta semana\n2️⃣ La próxima semana\n3️⃣ En 15 días\n4️⃣ En 3 semanas\n\n👉 Respondé del 1 al 4.")
-            return Response(content=str(response), media_type="application/xml; charset=utf-8")
-
         mapa = sesiones[num_telefono].get("mapa_dias", {})
         dia_det = next((d for d in mapa.keys() if quitar_tildes(d) in msg_limpio), None)
         cantidad_turnos = sesiones[num_telefono].get("cantidad_turnos", 1)
@@ -414,16 +428,8 @@ async def whatsapp(
     # ==========================================
     # PASO 6: INICIAR LOOP DE NOMBRES Y SERVICIOS
     # ==========================================
-    # ==========================================
-    # PASO 6: INICIAR LOOP DE NOMBRES Y SERVICIOS
-    # ==========================================
     if estado_actual == "viendo_horarios" and "cancelar" not in msg:
         h_des = extraer_hora(msg)
-        
-        if msg == "8":
-            sesiones[num_telefono]["estado"] = "eligiendo_semana"
-            response.message("Ok, volvemos a elegir día. Por favor mandá un *8* nuevamente para ver tu semana, o un *0* para reiniciar todo.")
-            return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
         if h_des:
             cantidad_turnos = sesiones[num_telefono].get("cantidad_turnos", 1)
