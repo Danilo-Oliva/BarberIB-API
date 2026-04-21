@@ -5,6 +5,5 @@ oauth2client
 twilio
 pytz
 pandas
-dataframe-image
 matplotlib
 jinja2

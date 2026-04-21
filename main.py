@@ -3,7 +3,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 from twilio.twiml.messaging_response import MessagingResponse
 from fastapi import FastAPI, Form, Response
 from fastapi.staticfiles import StaticFiles
-import dataframe_image as dfi
 import pandas as pd
 import datetime
 import pytz
@@ -382,7 +381,10 @@ async def whatsapp(
                 # GENERAR Y ENVIAR LA FOTOPO.. LET HIM COOK
                 # ==========================================
                 try:
-                    # 1. Armamos data solo de ejemplito
+                    import matplotlib
+                    matplotlib.use("Agg")
+                    import matplotlib.pyplot as plt
+
                     data = {
                         "Hora": ["10:00", "11:00", "12:00", "13:00"],
                         "Lunes": ["Libre", "Ocupado", "Libre", "Libre"],
@@ -390,30 +392,45 @@ async def whatsapp(
                     }
                     df = pd.DataFrame(data)
 
-                    def pintar_celdas(val):
-                        if val == "Libre": return 'background-color: #28a745; color: white;'
-                        elif val == "Ocupado": return 'background-color: #6c757d; color: white;'
-                        return ''
+                    fig, ax = plt.subplots(figsize=(4, 2))
+                    ax.axis("off")
 
-                    # NOTA: En versiones nuevas de Pandas se usa map, en viejas applymap. Si da error, cambiar map por applymap.
-                    df_estilizado = df.style.map(pintar_celdas, subset=["Lunes", "Martes"])
-                    
-                    # Guardamos la foto en la carpeta static usando el número de teléfono
+                    tabla = ax.table(
+                        cellText=df.values,
+                        colLabels=df.columns,
+                        loc="center",
+                        cellLoc="center"
+                    )
+                    tabla.auto_set_font_size(False)
+                    tabla.set_fontsize(10)
+                    tabla.scale(1.2, 1.5)
+
+                    # Colorear celdas según valor
+                    for (row, col), cell in tabla.get_celld().items():
+                        if row == 0:
+                            cell.set_facecolor("#343a40")
+                            cell.set_text_props(color="white", fontweight="bold")
+                        else:
+                            val = df.values[row - 1][col]
+                            if val == "Libre":
+                                cell.set_facecolor("#28a745")
+                                cell.set_text_props(color="white")
+                            elif val == "Ocupado":
+                                cell.set_facecolor("#6c757d")
+                                cell.set_text_props(color="white")
+
                     ruta_imagen = f"static/agenda_{num_telefono}.png"
-                    dfi.export(df_estilizado, ruta_imagen, table_conversion="matplotlib")
-                    
-                    # Armamos el mensaje y le adjuntamos la foto
+                    plt.savefig(ruta_imagen, bbox_inches="tight", dpi=150, transparent=False)
+                    plt.close(fig)
+
                     msg_obj = response.message(res_text)
-                    
-                    # ⚠️ IMPORTANTE: Cambiá "TU-APP" por el nombre de tu URL en Render
-                    url_publica = f"https://barberib-bot.onrender.com/static/agenda_{num_telefono}.png" 
+                    url_publica = f"https://barberib-bot.onrender.com/static/agenda_{num_telefono}.png"
                     msg_obj.media(url_publica)
-                    
+
                     return Response(content=str(response), media_type="application/xml; charset=utf-8")
-                    
+
                 except Exception as e:
                     print(f"Error generando imagen: {e}")
-                    # Si algo falla con la imagen, el bot es inteligente y manda el texto normal
                     response.message(res_text)
                     return Response(content=str(response), media_type="application/xml; charset=utf-8")
             else:
