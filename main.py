@@ -30,7 +30,7 @@ client_sheets = gspread.authorize(creds)
 app = FastAPI()
 
 # -- CONFIGURACIÓN PARA LA CARPETA DE IMÁGENES EN RENDERCITO
-os.mkdir("static", exist_ok=True) #Papu Python va a crear la carpeta si no existe. Gracias Wenner, sin vos esto no era posible
+os.makedirs("static", exist_ok=True) #Papu Python va a crear la carpeta si no existe. Gracias Wenner, sin vos esto no era posible
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
