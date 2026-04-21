@@ -433,7 +433,7 @@ async def whatsapp(
                 res_text = f"Horarios de INICIO disponibles para el {dia_det.capitalize()} ({fecha_str}):\n\n" + "\n".join(dispo)
                 res_text += f"\n\n👉 Decime a qué hora quieren arrancar (ej: *{inicios_validos[0]}*)\n↩️ *b* para cambiar de día"
             else:
-                res_text = "Día sin bloques libres. 😭\n\n↩️ *8* para elegir otro día\n↩️ *0* para menú principal"
+                res_text = "Día sin bloques libres. 😭\n\n↩️ *b* para elegir otro día\n↩️ *0* para menú principal"
                 
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
@@ -474,7 +474,7 @@ async def whatsapp(
                 
                 sesiones[num_telefono]["lista_servicios"] = lista_servicios
 
-                res_text = f"¡Genial! Bloqueamos desde las {bloque_horas[0]}. ⏱️\n\n{texto_menu}\n\n👉 Para el **Turno 1 ({bloque_horas[0]})**, escribime el *Nombre* y el *Número de Servicio* (Ej: *Nacho 1*)."
+                res_text = f"¡Genial! Bloqueamos desde las {bloque_horas[0]}. ⏱️\n\n{texto_menu}\n\n👉 Para el *Turno 1 ({bloque_horas[0]})*, escribime el *Nombre* y el *Número de Servicio* (Ej: *Nacho 1*)."
                 response.message(res_text)
                 return Response(content=str(response), media_type="application/xml; charset=utf-8")
                 
@@ -565,7 +565,6 @@ async def whatsapp(
 
         resumen_txt += "\n⚠️ Recordá que tenemos 15 min de tolerancia. En caso de no presentarse o de cancelar en las 24 horas previas al turno, se deberá abonar el 50% del costo del servicio solicitado.\n\n"
 
-        # Pegar el Catálogo al final
         try:
             datos_catalogo = catalogo_sheet.get_all_values()
             texto_catalogo = "🛍️ *Aprovechá y mirá nuestros productos disponibles:*\n"
