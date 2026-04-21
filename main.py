@@ -431,7 +431,7 @@ async def whatsapp(
             if inicios_validos:
                 dispo = [f"✅ {h}" for h in inicios_validos]
                 res_text = f"Horarios de INICIO disponibles para el {dia_det.capitalize()} ({fecha_str}):\n\n" + "\n".join(dispo)
-                res_text += f"\n\n👉 Decime a qué hora quieren arrancar (ej: *{inicios_validos[0]}*)\n↩️ *8* para cambiar de día"
+                res_text += f"\n\n👉 Decime a qué hora quieren arrancar (ej: *{inicios_validos[0]}*)\n↩️ *b* para cambiar de día"
             else:
                 res_text = "Día sin bloques libres. 😭\n\n↩️ *8* para elegir otro día\n↩️ *0* para menú principal"
                 
