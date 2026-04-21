@@ -4,6 +4,7 @@ gspread
 oauth2client
 twilio
 pytz
-python-multipart
 pandas
 dataframe-image
+matplotlib
+jinja2
