@@ -142,20 +142,36 @@ async def whatsapp(
     # ==========================================
     # ENRUTADOR DE BOTÓN VOLVER (8) -
     # ==========================================
-    if msg == "8":
-        if estado_actual == "viendo_horarios":
-            # El cliente quiere volver a elegir día. 
-            # Le cambiamos el estado en el aire y NO hacemos return.
-            # Como el código sigue bajando, va a caer directo en el PASO 4 y mostrará los días.
+    # ==========================================
+    # ENRUTADOR DE BOTÓN VOLVER (8) - MAGIA DE ESTADOS
+    # ==========================================
+    if msg == "b":
+        if estado_actual in ["viendo_horarios", "ingresando_datos_turnos"]:
+            # Si está viendo horas o ya cargando datos, y aprieta 8, lo mandamos a elegir día de nuevo.
+            # Cambiamos el estado en el aire y NO hacemos return.
             estado_actual = "eligiendo_semana"
             sesiones[num_telefono]["estado"] = "eligiendo_semana"
+            # Como no hay 'return', el código sigue bajando, cae en el PASO 4 y muestra los días.
             
         elif estado_actual == "eligiendo_dia":
-            # El cliente quiere volver a elegir semana.
+            # Si estaba viendo los días y quiere volver, le toca elegir la SEMANA.
+            sesiones[num_telefono]["estado"] = "eligiendo_semana"
+            res_text = "Ok, volvemos atrás.\n\n¿Para cuándo buscan turno?\n\n1️⃣ Esta semana\n2️⃣ La próxima semana\n3️⃣ En 15 días\n4️⃣ En 3 semanas\n\n👉 Respondé con un número del 1 al 4.\n↩️ *b* para cambiar cantidad de turnos\n↩️ *0* para menú principal"
+            response.message(res_text)
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+            
+        elif estado_actual == "eligiendo_semana":
+            # Si estaba eligiendo semana y quiere volver, le toca elegir CANTIDAD de turnos.
             sesiones[num_telefono]["estado"] = "eligiendo_cantidad_turnos"
-            estado_actual = "eligiendo_cantidad_turnos"
-            barbero = sesiones[num_telefono].get("barbero_nombre", "Barbero")
-            res_text = f"Ok, volvemos atrás. Estás agendando con {barbero}.\n\n¿Para cuándo buscan turno?\n\n1️⃣ Esta semana\n2️⃣ La próxima semana\n3️⃣ En 15 días\n4️⃣ En 3 semanas\n\n👉 Respondé con un número del 1 al 4.\n↩️ *0* para volver a empezar"
+            barbero_nom = sesiones[num_telefono].get("barbero_nombre", "Nacho")
+            res_text = f"Ok, volvemos atrás.\n\n¿Cuántos turnos seguidos querés sacar?\n*(Aclaración: Si sacás más de un turno, serán consecutivos con {barbero_nom})*\n\n1️⃣ Un turno\n2️⃣ Dos turnos seguidos\n3️⃣ Tres turnos seguidos\n\n👉 Respondé con 1, 2 o 3.\n↩️ *b* para cambiar de barbero\n↩️ *0* para menú principal"
+            response.message(res_text)
+            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+            
+        elif estado_actual == "eligiendo_cantidad_turnos":
+            # Si estaba eligiendo cantidad, vuelve al principio a elegir BARBERO.
+            sesiones[num_telefono]["estado"] = "eligiendo_barbero"
+            res_text = "Ok, volvemos atrás.\n\n¿Con quién te querés atender?\n\n1️⃣ Nacho\n2️⃣ Sebas\n\n👉 Respondé con 1 o 2.\n↩️ *0* para menú principal"
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
@@ -278,8 +294,8 @@ async def whatsapp(
     # PASO 4: ELEGIR DÍA (Filtro por bloques)
     # ==========================================
     if estado_actual == "eligiendo_semana":
-        if msg in ["1", "2", "3", "4", "8"]:
-            if msg != "8":
+        if msg in ["1", "2", "3", "4", "b"]:
+            if msg != "b":
                 sesiones[num_telefono]["semana"] = int(msg)
                 
             semana_elegida = sesiones[num_telefono].get("semana", 1)
@@ -352,9 +368,9 @@ async def whatsapp(
                 txt_d = ", ".join(dias_disponibles[:-1]) + " o " + dias_disponibles[-1] if len(dias_disponibles) > 1 else dias_disponibles[0]
                 res_text = f"Tengo bloques de {cantidad_turnos} turnos seguidos para el {txt_d}."
                 if avisos_exc: res_text += "\n\n" + "\n".join(avisos_exc)
-                res_text += "\n\n👉 Escribí el día (ej: Lunes)\n↩️ *8* para otra semana\n↩️ *0* para empezar de cero"
+                res_text += "\n\n👉 Escribí el día (ej: Lunes)\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
             else:
-                res_text = f"No hay {cantidad_turnos} turnos seguidos disponibles esa semana. 😭\n\n↩️ *8* para elegir otra semana\n↩️ *0* para menú principal"
+                res_text = f"No hay {cantidad_turnos} turnos seguidos disponibles esa semana. 😭\n\n↩️ *b* para elegir otra semana\n↩️ *0* para menú principal"
                 
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
@@ -422,7 +438,7 @@ async def whatsapp(
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
-            response.message("No entendí el día. Revisá la lista arriba. 👆\n↩️ *8* para elegir otra semana")
+            response.message("No entendí el día. Revisá la lista arriba. 👆\n↩️ *b* para elegir otra semana")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     # ==========================================
