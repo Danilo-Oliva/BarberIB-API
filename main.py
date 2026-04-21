@@ -406,7 +406,7 @@ async def whatsapp(
                     msg_obj = response.message(res_text)
                     
                     # ⚠️ IMPORTANTE: Cambiá "TU-APP" por el nombre de tu URL en Render
-                    url_publica = f"https://TU-APP.onrender.com/static/agenda_{num_telefono}.png" 
+                    url_publica = f"https://barberib-bot.onrender.com/static/agenda_{num_telefono}.png" 
                     msg_obj.media(url_publica)
                     
                     return Response(content=str(response), media_type="application/xml; charset=utf-8")
