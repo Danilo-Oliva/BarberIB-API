@@ -7,3 +7,4 @@ pytz
 pandas
 matplotlib
 jinja2
+python-multipart
