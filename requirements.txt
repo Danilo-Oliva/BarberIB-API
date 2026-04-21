@@ -5,3 +5,5 @@ oauth2client
 twilio
 pytz
 python-multipart
+pandas
+dataframe-image
