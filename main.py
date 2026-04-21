@@ -1,11 +1,14 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from fastapi import FastAPI, Form, Response
 from twilio.twiml.messaging_response import MessagingResponse
+from fastapi import FastAPI, Form, Response
+from fastapi.staticfiles import StaticFiles
+import dataframe_image as dfi
+import pandas as pd
 import datetime
 import pytz
-import os
 import json
+import os
 import re
 
 # --- CONFIGURACIÓN PARA LA NUBE (RAILWAY/RENDER) ---
@@ -25,6 +28,11 @@ else:
 client_sheets = gspread.authorize(creds)
 
 app = FastAPI()
+
+# -- CONFIGURACIÓN PARA LA CARPETA DE IMÁGENES EN RENDERCITO
+os.mkdir("static", exist_ok=True) #Papu Python va a crear la carpeta si no existe. Gracias Wenner, sin vos esto no era posible
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # --- ABRIR SHEETS UNA SOLA VEZ AL INICIO ---
 archivo = client_sheets.open("Agenda_Barberia")
@@ -369,6 +377,45 @@ async def whatsapp(
                 res_text = f"Tengo bloques de {cantidad_turnos} turnos seguidos para el {txt_d}."
                 if avisos_exc: res_text += "\n\n" + "\n".join(avisos_exc)
                 res_text += "\n\n👉 Escribí el día (ej: Lunes)\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
+                
+                # ==========================================
+                # GENERAR Y ENVIAR LA FOTOPO.. LET HIM COOK
+                # ==========================================
+                try:
+                    # 1. Armamos data solo de ejemplito
+                    data = {
+                        "Hora": ["10:00", "11:00", "12:00", "13:00"],
+                        "Lunes": ["Libre", "Ocupado", "Libre", "Libre"],
+                        "Martes": ["Ocupado", "Ocupado", "Libre", "Ocupado"]
+                    }
+                    df = pd.DataFrame(data)
+
+                    def pintar_celdas(val):
+                        if val == "Libre": return 'background-color: #28a745; color: white;'
+                        elif val == "Ocupado": return 'background-color: #6c757d; color: white;'
+                        return ''
+
+                    # NOTA: En versiones nuevas de Pandas se usa map, en viejas applymap. Si da error, cambiar map por applymap.
+                    df_estilizado = df.style.map(pintar_celdas, subset=["Lunes", "Martes"])
+                    
+                    # Guardamos la foto en la carpeta static usando el número de teléfono
+                    ruta_imagen = f"static/agenda_{num_telefono}.png"
+                    dfi.export(df_estilizado, ruta_imagen, table_conversion="matplotlib")
+                    
+                    # Armamos el mensaje y le adjuntamos la foto
+                    msg_obj = response.message(res_text)
+                    
+                    # ⚠️ IMPORTANTE: Cambiá "TU-APP" por el nombre de tu URL en Render
+                    url_publica = f"https://TU-APP.onrender.com/static/agenda_{num_telefono}.png" 
+                    msg_obj.media(url_publica)
+                    
+                    return Response(content=str(response), media_type="application/xml; charset=utf-8")
+                    
+                except Exception as e:
+                    print(f"Error generando imagen: {e}")
+                    # Si algo falla con la imagen, el bot es inteligente y manda el texto normal
+                    response.message(res_text)
+                    return Response(content=str(response), media_type="application/xml; charset=utf-8")
             else:
                 res_text = f"No hay {cantidad_turnos} turnos seguidos disponibles esa semana. 😭\n\n↩️ *b* para elegir otra semana\n↩️ *0* para menú principal"
                 
