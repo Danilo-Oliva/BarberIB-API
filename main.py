@@ -316,6 +316,10 @@ async def whatsapp(
             dias_disponibles, mapa_dias, avisos_exc = [], {}, []
             lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
 
+            # --- VARIABLES NUEVAS PARA CONSTRUIR LA TABLA VISUAL ---
+            matriz_semana = {}
+            horas_totales_semana = set()
+
             for i in range(inicio_rango, fin_rango):
                 fecha_dt = lun_act + datetime.timedelta(days=i) 
                 if fecha_dt.date() < hoy_dt.date() or fecha_dt.weekday() not in DIAS_LABORABLES:
@@ -336,6 +340,8 @@ async def whatsapp(
                     m_txt = f" por {exc['motivo']}" if exc['motivo'] else ""
                     if exc["tipo"] == "cerrado":
                         avisos_exc.append(f"❌ {nombre_dia.capitalize()}: Cerrado{m_txt}.")
+                        # Anotamos en la matriz que el día entero está cerrado
+                        matriz_semana[nombre_dia.capitalize()] = "CERRADO"
                         continue
                     elif exc["tipo"] == "especial":
                         avisos_exc.append(f"⚠️ {nombre_dia.capitalize()}: Horario {exc['horas']}{m_txt}.")
@@ -357,6 +363,17 @@ async def whatsapp(
                         else:
                             horas_disp_reales.append(h)
 
+                # --- LÓGICA NUEVA: GUARDAR DATOS DEL DÍA PARA LA IMAGEN ---
+                estado_horas_dia = {}
+                for h in horas_del_dia:
+                    horas_totales_semana.add(h) # Coleccionamos todas las horas posibles
+                    if h in horas_disp_reales:
+                        estado_horas_dia[h] = "Libre"
+                    else:
+                        estado_horas_dia[h] = "Ocupado"
+                
+                matriz_semana[nombre_dia.capitalize()] = estado_horas_dia
+
                 hay_bloque = False
                 for idx_h in range(len(horas_fijas)):
                     if idx_h + cantidad_turnos <= len(horas_fijas):
@@ -371,6 +388,7 @@ async def whatsapp(
                     mapa_dias[nombre_dia] = fecha_str
 
             sesiones[num_telefono]["mapa_dias"] = mapa_dias
+            
             if dias_disponibles:
                 txt_d = ", ".join(dias_disponibles[:-1]) + " o " + dias_disponibles[-1] if len(dias_disponibles) > 1 else dias_disponibles[0]
                 res_text = f"Tengo bloques de {cantidad_turnos} turnos seguidos para el {txt_d}."
@@ -378,21 +396,34 @@ async def whatsapp(
                 res_text += "\n\n👉 Escribí el día (ej: Lunes)\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
                 
                 # ==========================================
-                # GENERAR Y ENVIAR LA FOTOPO.. LET HIM COOK
+                # GENERAR Y ENVIAR LA FOTO CON DATOS REALES
                 # ==========================================
                 try:
                     import matplotlib
                     matplotlib.use("Agg")
                     import matplotlib.pyplot as plt
 
-                    data = {
-                        "Hora": ["10:00", "11:00", "12:00", "13:00"],
-                        "Lunes": ["Libre", "Ocupado", "Libre", "Libre"],
-                        "Martes": ["Ocupado", "Ocupado", "Libre", "Ocupado"]
-                    }
+                    # 1. Armar el DataFrame dinámicamente
+                    lista_horas = sorted(list(horas_totales_semana))
+                    data = {"Hora": lista_horas}
+
+                    # Rellenar columnas por día
+                    for dia_nom, estados in matriz_semana.items():
+                        col_data = []
+                        if estados == "CERRADO":
+                            col_data = ["Cerrado"] * len(lista_horas)
+                        else:
+                            for h in lista_horas:
+                                # Si un día no tiene cierta hora (ej: sábado a la tarde), le pone "---"
+                                col_data.append(estados.get(h, "---"))
+                        data[dia_nom] = col_data
+
                     df = pd.DataFrame(data)
 
-                    fig, ax = plt.subplots(figsize=(4, 2))
+                    # 2. Dibujar la tabla (Escalado dinámico para que no se apriete)
+                    ancho_fig = max(4, len(df.columns) * 0.9)
+                    alto_fig = max(2, len(df) * 0.3)
+                    fig, ax = plt.subplots(figsize=(ancho_fig, alto_fig))
                     ax.axis("off")
 
                     tabla = ax.table(
@@ -403,9 +434,9 @@ async def whatsapp(
                     )
                     tabla.auto_set_font_size(False)
                     tabla.set_fontsize(10)
-                    tabla.scale(1.2, 1.5)
+                    tabla.scale(1, 1.5)
 
-                    # Colorear celdas según valor
+                    # 3. Colorear celdas
                     for (row, col), cell in tabla.get_celld().items():
                         if row == 0:
                             cell.set_facecolor("#343a40")
@@ -413,11 +444,17 @@ async def whatsapp(
                         else:
                             val = df.values[row - 1][col]
                             if val == "Libre":
-                                cell.set_facecolor("#28a745")
+                                cell.set_facecolor("#28a745") # Verde
                                 cell.set_text_props(color="white")
                             elif val == "Ocupado":
-                                cell.set_facecolor("#6c757d")
+                                cell.set_facecolor("#6c757d") # Gris
                                 cell.set_text_props(color="white")
+                            elif val == "Cerrado":
+                                cell.set_facecolor("#dc3545") # Rojo
+                                cell.set_text_props(color="white")
+                            elif val == "---":
+                                cell.set_facecolor("#e9ecef") # Gris clarito (fuera de horario)
+                                cell.set_text_props(color="black")
 
                     ruta_imagen = f"static/agenda_{num_telefono}.png"
                     plt.savefig(ruta_imagen, bbox_inches="tight", dpi=150, transparent=False)
@@ -430,20 +467,17 @@ async def whatsapp(
                     return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
                 except Exception as e:
-                    print(f"Error generando imagen: {e}")
+                    print(f"Error generando imagen real: {e}")
                     response.message(res_text)
                     return Response(content=str(response), media_type="application/xml; charset=utf-8")
             else:
                 res_text = f"No hay {cantidad_turnos} turnos seguidos disponibles esa semana. 😭\n\n↩️ *b* para elegir otra semana\n↩️ *0* para menú principal"
-                
-            response.message(res_text)
-            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+                response.message(res_text)
+                return Response(content=str(response), media_type="application/xml; charset=utf-8")
         
         else:
             response.message("Por favor, respondé con un número del 1 al 4 para elegir la semana. 👆")
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
-        
-
     # ==========================================
     # PASO 5: VER HORARIOS DE INICIO
     # ==========================================
