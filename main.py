@@ -479,7 +479,20 @@ async def whatsapp(
                 res_text = f"Tengo bloques de {cantidad_turnos} turnos seguidos para el {txt_d}."
                 if avisos_exc:
                     res_text += "\n\n" + "\n".join(avisos_exc)
-                res_text += "\n\n👉 Escribí el día (ej: Lunes)\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
+                
+                # --- AGREGAMOS EL MENÚ DE SERVICIOS AL TEXTO DE LA TABLA ---
+                try:
+                    datos_servicios = servicios_sheet.get_all_values()
+                    texto_menu = "\n\n💇‍♂️ *Lista de Servicios:*\n"
+                    for i, fila in enumerate(datos_servicios[1:], start=1):
+                        if len(fila) >= 2 and fila[0].strip():
+                            texto_menu += f"💈 *{i}* - {fila[0].strip()} (${fila[1].strip()})\n"
+                    res_text += texto_menu
+                except Exception as e:
+                    print(f"Error cargando servicios en PASO 4: {e}")
+                # -----------------------------------------------------------
+
+                res_text += "\n👉 Escribí el Día, Hora, Nombre y N° Servicio (ej: Lunes 16:00 Nachito 1)\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
 
                 # ==========================================
                 # GENERAR Y ENVIAR LA FOTO CON DATOS REALES
