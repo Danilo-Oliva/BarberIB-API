@@ -131,7 +131,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
                 except Exception as e:
                     print(f"Error cargando servicios en PASO 4: {e}")
 
-                res_text += "\n👉 Escribí el Día, Hora, Nombre y N° Servicio (ej: Lunes 16:00 Nachito 1)\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
+                res_text += "\n👉 Escribí el *DÍA, HORA, NOMBRE y N° SERVICIO* (ej: Lunes 16:00 Nachito 1)\n\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
 
                 msg_obj = response.message(res_text)
                 url_publica = f"https://barberib-bot.onrender.com/static/agenda_{barbero_id}_sem{semana_elegida}.png"
@@ -194,9 +194,24 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
             h_des = extraer_hora(msg)
             if h_des:
                 if h_des in inicios_validos:
-                    partes_extra = [p for p in partes if quitar_tildes(dia_det) not in quitar_tildes(p) and h_des not in p]
+                    partes_extra = []
+                    dia_removido = False
+                    hora_removida = False
+                    
+                    for p in partes:
+                        if not dia_removido and quitar_tildes(dia_det) in quitar_tildes(p):
+                            dia_removido = True
+                            continue
+                        
+                        if not hora_removida and extraer_hora(p) == h_des:
+                            hora_removida = True
+                            continue
+                            
+                        partes_extra.append(p)
+                        
                     texto_restante = " ".join(partes_extra)
                     tiene_numero = any(p.isdigit() for p in partes_extra)
+                    # --------------------------------
 
                     if texto_restante and tiene_numero:
                         idx_arranque = h_dia.index(h_des)
