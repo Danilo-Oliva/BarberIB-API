@@ -211,7 +211,6 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
                         
                     texto_restante = " ".join(partes_extra)
                     tiene_numero = any(p.isdigit() for p in partes_extra)
-                    # --------------------------------
 
                     if texto_restante and tiene_numero:
                         idx_arranque = h_dia.index(h_des)
