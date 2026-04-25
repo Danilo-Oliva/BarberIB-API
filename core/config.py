@@ -31,6 +31,7 @@ horarios_b2 = archivo.worksheet("Sebas")
 servicios_sheet = archivo.worksheet("Servicios")
 conf_sheet = archivo.worksheet("Configuracion")
 catalogo_sheet = archivo.worksheet("Catalogo")
+deudores_sheet = archivo.worksheet("Deudores")
 
 # --- CONSTANTES GLOBALES ---
 DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]

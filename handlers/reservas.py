@@ -2,7 +2,7 @@ import datetime
 from fastapi import Response
 from twilio.twiml.messaging_response import MessagingResponse
 from utils.helpers import quitar_tildes, obtener_horas_por_dia, extraer_hora, obtener_inicio_semana_reservas
-from core.config import agenda_sheet, servicios_sheet, tz_arg, DIAS_SEMANA, DIAS_LABORABLES
+from core.config import agenda_sheet, servicios_sheet, tz_arg, DIAS_SEMANA, DIAS_LABORABLES, deudores_sheet
 from utils.helpers import quitar_tildes, obtener_horas_por_dia, extraer_hora
 
 async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesiones: dict, datos_horarios: list, excepciones: dict, barbero_id: str):
@@ -11,9 +11,31 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
     partes = msg.split()
 
     # ==========================================
-    # PASO 1: ELEGIR BARBERO
+    # PASO 1: ELEGIR BARBERO (Con Filtro de Deudores)
     # ==========================================
     if msg == "1" and estado_actual == "inicio":
+        
+        # --- EL PATOVICA: Revisamos si debe plata ---
+        try:
+            datos_deudores = deudores_sheet.get_all_values()
+            es_deudor = False
+            monto_total = 0
+            
+            # Recorremos la tabla saltando los títulos (fila 0)
+            for fila in datos_deudores[1:]:
+                # Si el teléfono coincide y el estado es "Pendiente"
+                if len(fila) >= 5 and fila[0] == num_telefono and fila[4].strip().lower() == "pendiente":
+                    es_deudor = True
+                    # Sumamos la deuda por si canceló tarde 2 veces
+                    monto_total += int(fila[3]) if fila[3].isdigit() else 0
+                    
+            if es_deudor:
+                sesiones[num_telefono]["estado"] = "inicio"
+                response.message(f"⛔ *SISTEMA BLOQUEADO*\n\n¡Hola! Tenés un saldo pendiente de *${monto_total}* por una cancelación tardía.\n\nAbonalo al alias *ALIAS.NACHO.MP* y avisale a Nacho (NUMERO_DE_NACHO) para que te desbloquee y puedas sacar turnos de nuevo.")
+                return Response(content=str(response), media_type="application/xml; charset=utf-8")
+        except Exception as e:
+            print(f"Error leyendo deudores: {e}")
+
         sesiones[num_telefono]["estado"] = "eligiendo_barbero"
         response.message("¡Perfecto! ¿Con quién te querés atender?\n\n1️⃣ Nacho\n2️⃣ Sebas\n\n👉 Respondé con 1 o 2.\n↩️ *b* para volver un paso atrás\n🏠 *0* para volver al Inicio")
         return Response(content=str(response), media_type="application/xml; charset=utf-8")

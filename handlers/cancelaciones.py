@@ -2,7 +2,8 @@ import datetime
 from fastapi import Response
 from twilio.twiml.messaging_response import MessagingResponse
 
-from core.config import agenda_sheet, horarios_b1, horarios_b2, tz_arg
+# IMPORTANTE: Agregamos deudores_sheet al import
+from core.config import agenda_sheet, horarios_b1, horarios_b2, deudores_sheet, tz_arg
 from utils.helpers import normalizar_telefono
 
 async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, sesiones: dict):
@@ -10,7 +11,7 @@ async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, s
     hoy_dt = datetime.datetime.now(tz_arg)
 
     # ==========================================
-    # INICIO DE CANCELACIÓN (Apretó el "2" en el menú principal)
+    # INICIO DE CANCELACIÓN
     # ==========================================
     if msg == "2" and estado_actual == "inicio":
         datos_a = agenda_sheet.get_all_values()
@@ -22,9 +23,17 @@ async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, s
                     f_fecha = f[0]
                     f_hora = f[1].strip().zfill(5)
                     f_barbero = f[6] if len(f) >= 7 else "Nacho"
-                    if datetime.datetime.strptime(f_fecha, "%d/%m/%Y").date() >= hoy_dt.date():
+                    
+                    # Convertimos la fecha y hora del turno a un objeto datetime para compararlo bien
+                    try:
+                        turno_dt = datetime.datetime.strptime(f"{f_fecha} {f_hora}", "%d/%m/%Y %H:%M")
+                        turno_dt = tz_arg.localize(turno_dt) # Le ponemos zona horaria argentina
+                    except Exception:
+                        continue # Si hay un error de formato en el excel, lo salteamos
+
+                    if turno_dt > hoy_dt:
                         turnos_encontrados.append(
-                            {"fecha": f_fecha, "hora": f_hora, "barbero": f_barbero}
+                            {"fecha": f_fecha, "hora": f_hora, "barbero": f_barbero, "datetime": turno_dt}
                         )
 
         if not turnos_encontrados:
@@ -43,19 +52,30 @@ async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, s
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     # ==========================================
-    # PROCESAMIENTO DE LA CANCELACIÓN (Eligió el turno a borrar)
+    # PROCESAMIENTO DE LA CANCELACIÓN
     # ==========================================
     if estado_actual == "eligiendo_turno_cancelar" and msg != "0":
         turnos_guardados = sesiones[num_telefono].get("turnos_cancelables", [])
         if msg.isdigit() and 1 <= int(msg) <= len(turnos_guardados):
             turno_elegido = turnos_guardados[int(msg) - 1]
             f_c, h_c, barbero_canc = turno_elegido["fecha"], turno_elegido["hora"], turno_elegido["barbero"]
+            turno_dt = turno_elegido["datetime"]
+
+            # --- MATEMÁTICA DE 24HS ---
+            diferencia_horas = (turno_dt - hoy_dt).total_seconds() / 3600
+            es_cancelacion_tardia = diferencia_horas < 24.0
 
             datos_a_actualizados = agenda_sheet.get_all_values()
             fila_a_borrar = None
+            precio_turno = 0
+            nombre_cliente = "Cliente"
+
             for i, f in enumerate(datos_a_actualizados):
                 if len(f) >= 4 and normalizar_telefono(f[3]) == num_telefono and f[0] == f_c and f[1].strip().zfill(5) == h_c:
                     fila_a_borrar = i + 1
+                    nombre_cliente = f[2] if len(f) > 2 else "Cliente"
+                    precio_str = f[5] if len(f) > 5 else "0"
+                    precio_turno = int(precio_str) if precio_str.isdigit() else 0
                     break
 
             if fila_a_borrar:
@@ -82,7 +102,15 @@ async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, s
                     print(f"Error borrando grilla: {e}")
 
                 sesiones[num_telefono]["estado"] = "inicio"
-                response.message("Turno cancelado exitosamente. 🤝\n\nEl espacio ya está libre de nuevo.")
+
+                # --- LÓGICA DE MULTA ---
+                if es_cancelacion_tardia and precio_turno > 0:
+                    multa = int(precio_turno / 2)
+                    deudores_sheet.append_row([num_telefono, nombre_cliente, f_c, multa, "Pendiente"])
+                    
+                    response.message(f"Turno cancelado. \n\n⚠️ *ATENCIÓN:* Como cancelaste con menos de 24hs de anticipación, tenés un recargo del 50% (${multa}).\n\nPor favor, transferilo al alias *ALIAS.NACHO.MP* y mandale el comprobante por privado a Nacho (NUMERO_DE_NACHO).\n\n⛔ Hasta que no se acredite, el sistema no te permitirá sacar nuevos turnos.")
+                else:
+                    response.message("Turno cancelado exitosamente. 🤝\n\nEl espacio ya está libre de nuevo.")
                 
             else:
                 response.message("Hubo un problema. Quizás ya había sido borrado. 🤷‍♂️\n\n↩️ *0* para empezar de nuevo")
