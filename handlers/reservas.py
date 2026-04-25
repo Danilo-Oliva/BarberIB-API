@@ -15,7 +15,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
     # ==========================================
     if msg == "1" and estado_actual == "inicio":
         sesiones[num_telefono]["estado"] = "eligiendo_barbero"
-        response.message("¡Perfecto! ¿Con quién te querés atender?\n\n1️⃣ Nacho\n2️⃣ Sebas\n\n👉 Respondé con 1 o 2.\n↩️ *0* para volver a empezar")
+        response.message("¡Perfecto! ¿Con quién te querés atender?\n\n1️⃣ Nacho\n2️⃣ Sebas\n\n👉 Respondé con 1 o 2.\n↩️ *b* para volver un paso atrás\n🏠 *0* para volver al Inicio")
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     # ==========================================
@@ -28,7 +28,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
             sesiones[num_telefono]["barbero_nombre"] = barbero_nom
             sesiones[num_telefono]["estado"] = "eligiendo_cantidad_turnos"
 
-            res_text = f"Elegiste a {barbero_nom}. ✂️\n\n¿Cuántos turnos seguidos querés sacar?\n*(Aclaración: Si sacás más de un turno, serán todos consecutivos con {barbero_nom})*\n\n1️⃣ Un turno\n2️⃣ Dos turnos seguidos\n3️⃣ Tres turnos seguidos\n\n👉 Respondé con 1, 2 o 3.\n↩️ *0* para volver a empezar"
+            res_text = f"Elegiste a {barbero_nom}. ✂️\n\n¿Cuántos turnos seguidos querés sacar?\n*(Aclaración: Si sacás más de un turno, serán todos consecutivos con {barbero_nom})*\n\n1️⃣ Un turno\n2️⃣ Dos turnos seguidos\n3️⃣ Tres turnos seguidos\n\n👉 Respondé con 1, 2 o 3.\n↩️ *b* para volver un paso atrás\n🏠 *0* para volver al Inicio"
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
@@ -43,7 +43,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
             sesiones[num_telefono]["cantidad_turnos"] = int(msg)
             sesiones[num_telefono]["estado"] = "eligiendo_semana"
 
-            res_text = "¿Para cuándo buscan turno?\n\n1️⃣ Esta semana\n2️⃣ La próxima semana\n3️⃣ En 15 días\n4️⃣ En 3 semanas\n\n👉 Respondé con un número del 1 al 4.\n↩️ *0* para volver"
+            res_text = "¿Para cuándo buscan turno?\n\n1️⃣ Esta semana\n2️⃣ La próxima semana\n3️⃣ En 15 días\n4️⃣ En 3 semanas\n\n👉 Respondé con un número del 1 al 4.\n↩️ *b* para volver un paso atrás\n🏠 *0* para volver al Inicio"
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
@@ -136,7 +136,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
                     res_text += f"\n*(Como sacaste {cantidad_turnos} turnos, podés mandar todos los nombres juntos separados por coma. Ej: Lunes 16:00 Sebas 1, Nacho 2)*"
                 else:
                     res_text += "\n*(Ej: Lunes 16:00 Nachito 1)*"
-                res_text += "\n\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
+                res_text += "\n\n↩️ *b* para otra semana\n🏠 *0* para volver al Inicio"
 
                 msg_obj = response.message(res_text)
                 url_publica = f"https://barberib-bot.onrender.com/static/agenda_{barbero_id}_sem{semana_elegida}.png"
@@ -144,7 +144,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
 
                 return Response(content=str(response), media_type="application/xml; charset=utf-8")
             else:
-                res_text = f"No hay {cantidad_turnos} turnos seguidos disponibles esa semana. 😭\n\n↩️ *b* para elegir otra semana\n↩️ *0* para menú principal"
+                res_text = f"No hay {cantidad_turnos} turnos seguidos disponibles esa semana. 😭\n\n↩️ *b* para elegir otra semana\n🏠 *0* para menú principal"
                 response.message(res_text)
                 return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
@@ -244,7 +244,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
                     res_text = f"Horarios de INICIO disponibles para el {dia_det.capitalize()} ({fecha_str}):\n\n" + "\n".join(dispo)
                     res_text += f"\n\n👉 Decime a qué hora quieren arrancar (ej: *{inicios_validos[0]}*)\n↩️ *b* para cambiar de día"
                 else:
-                    res_text = "Día sin bloques libres. 😭\n\n↩️ *b* para elegir otro día\n↩️ *0* para menú principal"
+                    res_text = "Día sin bloques libres. 😭\n\n↩️ *b* para elegir otro día\n🏠 *0* para volver al Inicio"
                 response.message(res_text)
                 return Response(content=str(response), media_type="application/xml; charset=utf-8")
         else:
