@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timedelta
 
 def quitar_tildes(texto):
     return (
@@ -45,3 +46,14 @@ def normalizar_telefono(telefono):
     """
     tel_solo_numeros = re.sub(r"\D", "", telefono)
     return tel_solo_numeros[-10:] if len(tel_solo_numeros) >= 10 else tel_solo_numeros
+
+def obtener_inicio_semana_reservas(hoy):
+    # .weekday() en Python: 0=Lunes, 6=Domingo
+    if hoy.weekday() == 6: 
+        # Si es domingo, el 'inicio' para el bot es el lunes que viene
+        inicio = hoy + timedelta(days=1)
+    else:
+        # Si no, es el lunes de esta semana
+        inicio = hoy - timedelta(days=hoy.weekday())
+    
+    return inicio.replace(hour=0, minute=0, second=0, microsecond=0)

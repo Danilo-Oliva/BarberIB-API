@@ -1,7 +1,7 @@
 import datetime
 from fastapi import Response
 from twilio.twiml.messaging_response import MessagingResponse
-
+from utils.helpers import quitar_tildes, obtener_horas_por_dia, extraer_hora, obtener_inicio_semana_reservas
 from core.config import agenda_sheet, servicios_sheet, tz_arg, DIAS_SEMANA, DIAS_LABORABLES
 from utils.helpers import quitar_tildes, obtener_horas_por_dia, extraer_hora
 
@@ -65,7 +65,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
 
             datos_agenda = agenda_sheet.get_all_values()
             dias_disponibles, mapa_dias, avisos_exc = [], {}, []
-            lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
+            lun_act = obtener_inicio_semana_reservas(hoy_dt)
 
             for i in range(inicio_rango, fin_rango):
                 fecha_dt = lun_act + datetime.timedelta(days=i)
@@ -165,7 +165,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
             sesiones[num_telefono]["fecha_seleccionada"] = fecha_str
 
             f_obj = datetime.datetime.strptime(fecha_str, "%d/%m/%Y")
-            lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
+            lun_act = obtener_inicio_semana_reservas(hoy_dt)
             idx_g = (f_obj.date() - lun_act.date()).days // 7
 
             h_dia = obtener_horas_por_dia(datos_horarios, f_obj.weekday(), idx_g)
