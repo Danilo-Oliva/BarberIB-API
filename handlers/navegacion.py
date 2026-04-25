@@ -9,8 +9,8 @@ async def manejar_navegacion(msg: str, num_telefono: str, estado_actual: str, se
     # ==========================================
     if msg == "0" and estado_actual != "inicio":
         sesiones[num_telefono] = {"estado": "inicio"}
-        # Forzamos el mensaje a "1" y el estado a "inicio" para que el router dispare el Paso 1
-        return None, "1", "inicio"
+        # Dejamos el mensaje en "0" para que pase de largo todos los pasos y caiga en el saludo inicial
+        return None, "0", "inicio"
 
     # ==========================================
     # BOTÓN VOLVER (b)
