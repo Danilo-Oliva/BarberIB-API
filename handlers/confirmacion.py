@@ -15,33 +15,49 @@ async def manejar_confirmacion(msg: str, num_telefono: str, estado_actual: str, 
         idx_actual = sesiones[num_telefono].get("indice_turno_actual", 0)
         cantidad_turnos = sesiones[num_telefono].get("cantidad_turnos", 1)
 
-        # Separar el número de servicio del nombre del cliente
-        id_servicio = next((p for p in partes if p.isdigit()), None)
-        nombre_cliente = " ".join([p for p in partes if p != id_servicio]).title()
+        # ==========================================
+        # MAGIA: PROCESADOR DE MÚLTIPLES TURNOS
+        # ==========================================
+        # Reemplazamos conectores comunes por comas para facilitar el corte
+        msg_limpio = msg.replace(" y ", ", ").replace(" - ", ", ")
+        
+        # Cortamos el mensaje en varios pedazos usando la coma
+        turnos_raw = [t.strip() for t in msg_limpio.split(",") if t.strip()]
 
-        if not nombre_cliente:
-            nombre_cliente = ProfileName if ProfileName else "Cliente"
+        for texto_turno in turnos_raw:
+            if idx_actual >= cantidad_turnos:
+                break # Si mandó de más, ignoramos y cortamos acá
 
-        servicio_elegido = next((s for s in lista_servicios if s["id"] == id_servicio), None)
+            partes_turno = texto_turno.split()
+            id_servicio = next((p for p in partes_turno if p.isdigit()), None)
+            nombre_cliente = " ".join([p for p in partes_turno if p != id_servicio]).title()
 
-        if not id_servicio or not servicio_elegido:
-            response.message("⚠️ No entendí qué servicio querés.\n\nPor favor, escribí el *Nombre* y el *Número* de la lista (Ej: *Nacho 2*).")
-            return Response(content=str(response), media_type="application/xml; charset=utf-8")
+            if not nombre_cliente:
+                nombre_cliente = ProfileName if ProfileName else "Cliente"
 
-        # Guardar en la memoria temporal
-        sesiones[num_telefono]["turnos_a_guardar"].append({
-            "hora": bloque_horas[idx_actual],
-            "nombre": nombre_cliente,
-            "servicio": servicio_elegido["nombre"],
-            "precio": servicio_elegido["precio"],
-        })
+            # Limpieza final (por si le quedó alguna coma pegada al nombre)
+            nombre_cliente = nombre_cliente.replace(",", "").strip()
 
-        idx_actual += 1
-        sesiones[num_telefono]["indice_turno_actual"] = idx_actual
+            servicio_elegido = next((s for s in lista_servicios if s["id"] == id_servicio), None)
 
-        # Si faltan turnos, volvemos a preguntar
+            if not id_servicio or not servicio_elegido:
+                response.message(f"⚠️ No entendí qué servicio querés para '{texto_turno}'.\n\nPor favor, escribí el *Nombre* y el *Número* de la lista para el Turno {idx_actual + 1} ({bloque_horas[idx_actual]}).")
+                return Response(content=str(response), media_type="application/xml; charset=utf-8")
+
+            # Guardar en la memoria temporal
+            sesiones[num_telefono]["turnos_a_guardar"].append({
+                "hora": bloque_horas[idx_actual],
+                "nombre": nombre_cliente,
+                "servicio": servicio_elegido["nombre"],
+                "precio": servicio_elegido["precio"],
+            })
+
+            idx_actual += 1
+            sesiones[num_telefono]["indice_turno_actual"] = idx_actual
+
+        # Si mandó menos nombres de los que había pedido, le avisamos cuántos faltan
         if idx_actual < cantidad_turnos:
-            res_text = f"✅ Anotado. \n\n👉 Ahora para el **Turno {idx_actual + 1} ({bloque_horas[idx_actual]})**, decime el *Nombre* y el *Número de Servicio*."
+            res_text = f"✅ Anotado. \n\n👉 Ahora faltan {cantidad_turnos - idx_actual} turno/s. Para el **Turno {idx_actual + 1} ({bloque_horas[idx_actual]})**, decime el *Nombre* y el *Número de Servicio*."
             response.message(res_text)
             return Response(content=str(response), media_type="application/xml; charset=utf-8")
 

@@ -131,7 +131,12 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
                 except Exception as e:
                     print(f"Error cargando servicios en PASO 4: {e}")
 
-                res_text += "\n👉 Escribí el *DÍA, HORA, NOMBRE y N° SERVICIO* (ej: Lunes 16:00 Nachito 1)\n\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
+                res_text += "\n👉 Escribí el *DÍA, HORA, NOMBRE y N° SERVICIO*."
+                if cantidad_turnos > 1:
+                    res_text += f"\n*(Como sacaste {cantidad_turnos} turnos, podés mandar todos los nombres juntos separados por coma. Ej: Lunes 16:00 Sebas 1, Nacho 2)*"
+                else:
+                    res_text += "\n*(Ej: Lunes 16:00 Nachito 1)*"
+                res_text += "\n\n↩️ *b* para otra semana\n↩️ *0* para empezar de cero"
 
                 msg_obj = response.message(res_text)
                 url_publica = f"https://barberib-bot.onrender.com/static/agenda_{barbero_id}_sem{semana_elegida}.png"
@@ -276,7 +281,9 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
 
                 sesiones[num_telefono]["lista_servicios"] = lista_servicios
 
-                res_text = f"¡Genial! Bloqueamos desde las {bloque_horas[0]}. ⏱️\n\n{texto_menu}\n\n👉 Para el *Turno 1 ({bloque_horas[0]})*, escribime el *Nombre* y el *Número de Servicio* (Ej: *Nacho 1*)."
+                res_text = f"¡Genial! Bloqueamos desde las {bloque_horas[0]}. ⏱️\n\n{texto_menu}\n\n👉 Escribí el *Nombre* y el *Número de Servicio* para los turnos."
+                if cantidad_turnos > 1:
+                    res_text += f"\n*(Podés mandar todos juntos separados por coma. Ej: Danilo 1, Juan 2)*"
                 response.message(res_text)
                 return Response(content=str(response), media_type="application/xml; charset=utf-8")
             else:
