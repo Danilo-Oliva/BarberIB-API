@@ -183,7 +183,6 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
 
         if dia_det:
             fecha_str = mapa[dia_det]
-            sesiones[num_telefono]["estado"] = "viendo_horarios"
             sesiones[num_telefono]["fecha_seleccionada"] = fecha_str
 
             f_obj = datetime.datetime.strptime(fecha_str, "%d/%m/%Y")
@@ -262,6 +261,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
 
             if sesiones[num_telefono]["estado"] == "eligiendo_dia":
                 if inicios_validos:
+                    sesiones[num_telefono]["estado"] = "viendo_horarios"
                     dispo = [f"✅ {h}" for h in inicios_validos]
                     res_text = f"Horarios de INICIO disponibles para el {dia_det.capitalize()} ({fecha_str}):\n\n" + "\n".join(dispo)
                     res_text += f"\n\n👉 Decime a qué hora quieren arrancar (ej: *{inicios_validos[0]}*)\n↩️ *b* para cambiar de día"

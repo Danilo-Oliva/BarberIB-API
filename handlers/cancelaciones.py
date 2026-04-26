@@ -1,8 +1,7 @@
 import datetime
 from fastapi import Response
 from twilio.twiml.messaging_response import MessagingResponse
-
-# IMPORTANTE: Agregamos deudores_sheet al import
+from utils.helpers import obtener_inicio_semana_reservas
 from core.config import agenda_sheet, horarios_b1, horarios_b2, deudores_sheet, tz_arg
 from utils.helpers import normalizar_telefono
 
@@ -84,7 +83,7 @@ async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, s
                     hoja_canc = horarios_b2 if barbero_canc == "Sebas" else horarios_b1
                     f_obj = datetime.datetime.strptime(f_c, "%d/%m/%Y")
                     c_h, c_c = (f_obj.weekday() * 2) + 1, (f_obj.weekday() * 2) + 2
-                    lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
+                    lun_act = obtener_inicio_semana_reservas(hoy_dt)
                     idx_g = (f_obj.date() - lun_act.date()).days // 7
 
                     if 0 <= idx_g <= 4:

@@ -1,7 +1,7 @@
 import datetime
 from fastapi import Response
 from twilio.twiml.messaging_response import MessagingResponse
-
+from utils.helpers import obtener_inicio_semana_reservas
 from core.config import agenda_sheet, catalogo_sheet, tz_arg
 from services.graficos import tocar_timbre
 
@@ -69,7 +69,7 @@ async def manejar_confirmacion(msg: str, num_telefono: str, estado_actual: str, 
         barbero_id = sesiones[num_telefono].get("barbero_id", "1")
         
         f_obj = datetime.datetime.strptime(fecha_r, "%d/%m/%Y")
-        lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
+        lun_act = obtener_inicio_semana_reservas(hoy_dt)
         idx_g = (f_obj.date() - lun_act.date()).days // 7
         c_h = (f_obj.weekday() * 2) + 1
         c_c = c_h + 1
@@ -104,7 +104,10 @@ async def manejar_confirmacion(msg: str, num_telefono: str, estado_actual: str, 
         resumen_txt += "\n⚠️ Recordá que tenemos 15 min de tolerancia. En caso de no presentarse o de cancelar en las 24 horas previas al turno, se deberá abonar el 50% del costo del servicio solicitado.\n\n"
 
         semana_turno = sesiones[num_telefono].get("semana", 1)
-        tocar_timbre(barbero_id, semana_turno, barbero_nom)
+        try:
+            tocar_timbre(barbero_id, semana_turno, barbero_nom)
+        except Exception as e:
+            print(f"Error al tocar el timbre: {e}")
 
         try:
             datos_catalogo = catalogo_sheet.get_all_values()

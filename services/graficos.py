@@ -4,13 +4,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import datetime
 import asyncio
-
+from utils.helpers import obtener_inicio_semana_reservas
 from core.config import agenda_sheet, horarios_b1, horarios_b2, conf_sheet, tz_arg, DIAS_SEMANA, DIAS_LABORABLES
 from utils.helpers import obtener_horas_por_dia
 
 def generar_foto_semana(barbero_id, semana_elegida, barbero_nom, datos_horarios, datos_agenda, excepciones):
     hoy_dt = datetime.datetime.now(tz_arg)
-    lun_act = hoy_dt - datetime.timedelta(days=hoy_dt.weekday())
+    lun_act = obtener_inicio_semana_reservas(hoy_dt)
     inicio_rango = (semana_elegida - 1) * 7
     fin_rango = semana_elegida * 7
     
