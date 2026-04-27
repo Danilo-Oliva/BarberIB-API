@@ -35,7 +35,7 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
             print(f"Error leyendo deudores: {e}")
 
         sesiones[num_telefono]["estado"] = "eligiendo_barbero"
-        response.message("¡Perfecto! ¿Con quién te querés atender?\n\n1️⃣ Nacho\n2️⃣ Sebas\n\n👉 Respondé con 1 o 2.\n↩️ *b* para volver un paso atrás\n🏠 *0* para volver al Inicio")
+        response.message("¡Perfecto! ¿Con quién te querés atender?\n\n1️⃣ Nacho\n2️⃣ Sebas\n\n👉 Respondé con 1 o 2.\n🏠 *0* para volver al Inicio")
         return Response(content=str(response), media_type="application/xml; charset=utf-8")
 
     # ==========================================
