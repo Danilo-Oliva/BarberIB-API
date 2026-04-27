@@ -1,6 +1,39 @@
 import re
 from datetime import datetime, timedelta
 
+def obtener_sesion(sesiones: dict, num_telefono: str) -> dict:
+    """
+    Devuelve la sesión del usuario de forma segura.
+    Si no existe o está corrupta (sin clave 'estado'), la reinicia.
+    Esto protege contra reinicios del servidor que borran la RAM.
+    """
+    sesion = sesiones.get(num_telefono)
+    if not isinstance(sesion, dict) or "estado" not in sesion:
+        sesiones[num_telefono] = {"estado": "inicio"}
+    return sesiones[num_telefono]
+
+# Fix 7: Rate limiting simple en memoria
+# Estructura: { num_telefono: [timestamp1, timestamp2, ...] }
+_rate_limit_log: dict = {}
+RATE_LIMIT_MAX_MSGS = 10      # máximo de mensajes permitidos
+RATE_LIMIT_VENTANA_SEG = 60   # en la ventana de N segundos
+
+def verificar_rate_limit(num_telefono: str) -> bool:
+    """
+    Devuelve True si el usuario está dentro del límite permitido.
+    Devuelve False si superó el límite (debe bloquearse el mensaje).
+    """
+    ahora = datetime.now()
+    ventana = timedelta(seconds=RATE_LIMIT_VENTANA_SEG)
+    historial = _rate_limit_log.get(num_telefono, [])
+
+    # Filtramos solo los mensajes dentro de la ventana activa
+    historial = [t for t in historial if ahora - t < ventana]
+    historial.append(ahora)
+    _rate_limit_log[num_telefono] = historial
+
+    return len(historial) <= RATE_LIMIT_MAX_MSGS
+
 def quitar_tildes(texto):
     return (
         texto.replace("á", "a")

@@ -9,6 +9,11 @@ async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, s
     response = MessagingResponse()
     hoy_dt = datetime.datetime.now(tz_arg)
 
+    # Fix 3: si el estado ya fue reseteado a "inicio" (por el enrutador de navegación
+    # con "0"), no procesar como cancelación aunque msg sea "0"
+    if estado_actual == "inicio" and msg == "0":
+        return None
+
     # ==========================================
     # INICIO DE CANCELACIÓN
     # ==========================================
@@ -86,6 +91,9 @@ async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, s
                     lun_act = obtener_inicio_semana_reservas(hoy_dt)
                     idx_g = (f_obj.date() - lun_act.date()).days // 7
 
+                    # Fix 5: idx_g puede ser negativo si el turno es de la semana
+                    # anterior al lunes calculado (ej: caso especial del domingo).
+                    # Solo limpiamos la grilla si el índice es válido.
                     if 0 <= idx_g <= 4:
                         f_o_g, b_t = None, -1
                         for n_f, f_d in enumerate(hoja_canc.get_all_values(), start=1):
@@ -97,6 +105,8 @@ async def manejar_cancelacion(msg: str, num_telefono: str, estado_actual: str, s
                                 break
                         if f_o_g:
                             hoja_canc.update_cell(f_o_g, c_c, "")
+                    else:
+                        print(f"⚠️ GRILLA: idx_g={idx_g} fuera de rango para {f_c}. El turno se borró de Agenda pero no de la grilla de horarios.")
                 except Exception as e:
                     print(f"Error borrando grilla: {e}")
 

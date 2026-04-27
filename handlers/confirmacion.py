@@ -107,7 +107,9 @@ async def manejar_confirmacion(msg: str, num_telefono: str, estado_actual: str, 
         try:
             tocar_timbre(barbero_id, semana_turno, barbero_nom)
         except Exception as e:
-            print(f"Error al tocar el timbre: {e}")
+            # Fix 9: el turno quedó guardado en Sheets, pero la foto de la agenda
+            # quedará desactualizada hasta el próximo ciclo del motor (15 min).
+            print(f"🔴 ALERTA tocar_timbre: falló para {barbero_nom} sem={semana_turno}. La foto se actualizará en el próximo ciclo del motor. Error: {e}")
 
         try:
             datos_catalogo = catalogo_sheet.get_all_values()

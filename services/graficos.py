@@ -60,7 +60,9 @@ def generar_foto_semana(barbero_id, semana_elegida, barbero_nom, datos_horarios,
                 
         matriz_semana[nombre_dia.capitalize()] = estado_horas_dia
         
-    if not horas_totales_semana: return
+    if not horas_totales_semana:
+        print(f"ℹ️ FOTO: Sin horarios para barbero_id={barbero_id} sem={semana_elegida}. No se genera imagen.")
+        return None
     
     lista_horas = sorted(list(horas_totales_semana))
     data = {"Hora": lista_horas}
@@ -99,6 +101,7 @@ def generar_foto_semana(barbero_id, semana_elegida, barbero_nom, datos_horarios,
     ruta_imagen = f"static/agenda_{barbero_id}_sem{semana_elegida}.png"
     plt.savefig(ruta_imagen, bbox_inches="tight", dpi=150, transparent=False)
     plt.close(fig)
+    return True
 
 async def motor_invisible():
     """Se ejecuta cada 15 min para tener todo pre-dibujado"""
@@ -116,11 +119,20 @@ async def motor_invisible():
                     excepciones[fila[0].strip()] = { "tipo": fila[1].strip().lower(), "horas": fila[2].strip() if len(fila) > 2 else "" }
             
             # Dibujamos las 4 semanas de Nacho y las 4 de Sebas (8 fotos en total)
+            fotos_vacias = []
             for semana in range(1, 5):
-                generar_foto_semana("1", semana, "Nacho", datos_b1, datos_agenda, excepciones)
-                generar_foto_semana("2", semana, "Sebas", datos_b2, datos_agenda, excepciones)
-                
-            print("👨‍🍳 MOTOR: ¡Las 8 fotos están listas!")
+                resultado_nacho = generar_foto_semana("1", semana, "Nacho", datos_b1, datos_agenda, excepciones)
+                resultado_sebas = generar_foto_semana("2", semana, "Sebas", datos_b2, datos_agenda, excepciones)
+                # Fix 8: generar_foto_semana devuelve None si no hay horas — lo registramos
+                if resultado_nacho is None:
+                    fotos_vacias.append(f"Nacho Sem{semana}")
+                if resultado_sebas is None:
+                    fotos_vacias.append(f"Sebas Sem{semana}")
+
+            if fotos_vacias:
+                print(f"⚠️ MOTOR: Las siguientes fotos quedaron vacías (sin horarios cargados): {', '.join(fotos_vacias)}")
+            else:
+                print("👨‍🍳 MOTOR: ¡Las 8 fotos están listas!")
         except Exception as e:
             print(f"Error en el motor de fotos: {e}")
             

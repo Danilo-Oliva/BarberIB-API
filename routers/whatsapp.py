@@ -28,6 +28,8 @@ from utils.helpers import (
     obtener_horas_por_dia,
     extraer_hora,
     normalizar_telefono,
+    obtener_sesion,
+    verificar_rate_limit,
 )
 
 # 3. Creamos el Router
@@ -55,15 +57,21 @@ async def whatsapp(
             media_type="application/xml; charset=utf-8",
         )
 
+    # Fix 7: Anti-spam — si el usuario mandó demasiados mensajes en poco tiempo, ignoramos
+    if not verificar_rate_limit(num_telefono):
+        print(f"⚠️ RATE LIMIT: {num_telefono} superó el límite de mensajes.")
+        return Response(
+            content=str(MessagingResponse()),
+            media_type="application/xml; charset=utf-8",
+        )
+
     if num_telefono not in sesiones:
         sesiones[num_telefono] = {"estado": "inicio"}
+    # Fix 2: recuperar sesión de forma segura (protege ante reinicio del servidor)
+    obtener_sesion(sesiones, num_telefono)
     estado_actual = sesiones[num_telefono]["estado"]
 
     print(f"DEBUG: Tel: {num_telefono} | Msg: {msg} | Estado: {estado_actual}")
-
-    barbero_id = sesiones[num_telefono].get("barbero_id", "1")
-    hoja_activa = horarios_b2 if barbero_id == "2" else horarios_b1
-    datos_horarios = hoja_activa.get_all_values()
 
     datos_conf = conf_sheet.get_all_values()
     excepciones = {}
@@ -103,6 +111,9 @@ async def whatsapp(
     # ==========================================
     # ENRUTADOR 3: RESERVAS (Pasos 1 al 6)
     # ==========================================
+    barbero_id = sesiones[num_telefono].get("barbero_id", "1")
+    hoja_activa = horarios_b2 if barbero_id == "2" else horarios_b1
+    datos_horarios = hoja_activa.get_all_values()
     res_respuesta = await manejar_reservas(
         msg,
         num_telefono,
@@ -122,6 +133,11 @@ async def whatsapp(
     # ==========================================
     # ENRUTADOR 4: CONFIRMACIÓN Y GUARDADO (Paso 7)
     # ==========================================
+    # Fix 4: recalcular hoja_activa aquí, DESPUÉS de reservas, para que use
+    # el barbero_id que el usuario acaba de elegir (y no el del mensaje anterior)
+    barbero_id = sesiones[num_telefono].get("barbero_id", "1")
+    hoja_activa = horarios_b2 if barbero_id == "2" else horarios_b1
+    datos_horarios = hoja_activa.get_all_values()
     conf_respuesta = await manejar_confirmacion(
         msg,
         num_telefono,

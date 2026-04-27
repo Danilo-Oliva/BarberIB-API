@@ -3,7 +3,6 @@ from fastapi import Response
 from twilio.twiml.messaging_response import MessagingResponse
 from utils.helpers import quitar_tildes, obtener_horas_por_dia, extraer_hora, obtener_inicio_semana_reservas
 from core.config import agenda_sheet, servicios_sheet, tz_arg, DIAS_SEMANA, DIAS_LABORABLES, deudores_sheet
-from utils.helpers import quitar_tildes, obtener_horas_por_dia, extraer_hora
 
 async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesiones: dict, datos_horarios: list, excepciones: dict, barbero_id: str):
     response = MessagingResponse()
@@ -11,17 +10,16 @@ async def manejar_reservas(msg: str, num_telefono: str, estado_actual: str, sesi
     partes = msg.split()
 
     # ==========================================
-    # PASO 1: ELEGIR BARBERO (Con Filtro de Deudores)
+    # PASO 1: ELEGIR BARBERO
     # ==========================================
     if msg == "1" and estado_actual == "inicio":
         
-        # --- EL PATOVICA: Revisamos si debe plata ---
         try:
             datos_deudores = deudores_sheet.get_all_values()
             es_deudor = False
             monto_total = 0
             
-            # Recorremos la tabla saltando los títulos (fila 0)
+            # Recorremos la tabla saltando los títulos
             for fila in datos_deudores[1:]:
                 # Si el teléfono coincide y el estado es "Pendiente"
                 if len(fila) >= 5 and fila[0] == num_telefono and fila[4].strip().lower() == "pendiente":
