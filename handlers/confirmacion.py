@@ -122,7 +122,7 @@ async def manejar_confirmacion(msg: str, num_telefono: str, estado_actual: str, 
                         texto_catalogo += f"🔹 {n_prod} - ${p_prod}\n"
                         hay_productos = True
             if hay_productos:
-                resumen_txt += texto_catalogo + "\n👉 Si querés alguno, avisale a tu barbero."
+                resumen_txt += texto_catalogo + "\n👉 Si querés alguno, avisale a tu barbero. \n\n Si te interesan otros emprendimientos de la empresa, podés visitar @mates.craziness en Instagram"
         except Exception as e:
             print(f"Error leyendo catálogo: {e}")
 
