@@ -154,6 +154,6 @@ async def whatsapp(
     # MENSAJE DE INICIO (Fallback)
     sesiones[num_telefono]["estado"] = "inicio"
     response.message(
-        "¡Hola! 🤖 Bienvenido a IB Barber Studio. \n Me llamo IBot, soy el asistente virtual de la barbería. \n⚠️ Recordá que tenemos 15 min de tolerancia. En caso de no presentarse o de cancelar en las 24 horas previas al turno, se deberá abonar el 50% del costo del servicio solicitado. \n Por favor, únicamente ingrese los datos solicitados. *NO AGREGUE NADA MAS*‼️ \n\n👉1️⃣ Para pedir turno \n👉2️⃣ Para cancelar turno \n\nCualquier duda que tengas y yo no te la pueda resolver, escribí un mensaje a este número👉 +54 9 11 6046-7963"
+        "¡Hola! 🤖 Bienvenido a IB Barber Studio. \nMe llamo IBot, soy el asistente virtual de la barbería. \n⚠️ Recordá que tenemos 15 min de tolerancia. En caso de no presentarse o de cancelar en las *24 horas* previas al turno, se deberá abonar el *50% del costo del servicio solicitado*. \nPor favor, únicamente ingrese los datos solicitados. *NO AGREGUE NADA MAS*‼️ \n\n👉1️⃣ Para pedir turno \n👉2️⃣ Para cancelar turno \n\nCualquier duda y/o problema que tengas y yo no te la pueda resolver, escribí un mensaje a este número👉 +54 9 11 6046-7963"
     )
     return Response(content=str(response), media_type="application/xml; charset=utf-8")
